@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lektionsplaneringsmodul · Frånvarokollen</title>
+<meta name="description" content="Mockup of a lesson plan generator module for Frånvarokollen. Skolverket Lgr22/Gy11 aligned." />
+
+<style>
+  :root {
+    --bg-page: #f5f5f3;
+    --bg-surface: #ffffff;
+    --bg-secondary: #f1efe8;
+    --bg-info: #e6f1fb;
+    --bg-success: #eaf3de;
+    --bg-warning: #faeeda;
+    --bg-danger: #fcebeb;
+    --bg-modal-overlay: rgba(20, 20, 20, 0.45);
+
+    --text-primary: #1f1f1d;
+    --text-secondary: #5f5e5a;
+    --text-tertiary: #888780;
+    --text-info: #0c447c;
+    --text-success: #27500a;
+    --text-warning: #633806;
+    --text-danger: #791f1f;
+
+    --border-subtle: rgba(0,0,0,0.10);
+    --border-default: rgba(0,0,0,0.18);
+    --border-info: #185fa5;
+    --border-warning: #ba7517;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0;
+    margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;
+  }
+
+  button { font: inherit; cursor: pointer; }
+  input, select, textarea {
+    font: inherit; color: inherit;
+    background: var(--bg-surface);
+    border: 0.5px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 6px 8px; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(24,95,165,0.25);
+    border-color: var(--border-info);
+  }
+  textarea { resize: vertical; min-height: 36px; }
+
+  /* Print: only the plan area when ?view=plan is open */
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white; }
+  }
+
+  @keyframes lpspin { to { transform: rotate(360deg); } }
+</style>
+
+<!-- React + Babel via CDN. No build step. -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+// ============================================================
+// Curriculum data (subset — full project has /curriculum module)
+// ============================================================
+const SUBJECTS_GRUNDSKOLA = [
+  { key: 'svenska',   name_sv: 'Svenska',                 name_en: 'Swedish' },
+  { key: 'matematik', name_sv: 'Matematik',               name_en: 'Mathematics' },
+  { key: 'engelska',  name_sv: 'Engelska',                name_en: 'English' },
+  { key: 'no',        name_sv: 'Naturorienterande ämnen', name_en: 'Science (Bi/Fy/Ke)' },
+  { key: 'so',        name_sv: 'Samhällsorienterande ämnen', name_en: 'Social Studies' },
+  { key: 'idrott',    name_sv: 'Idrott och hälsa',        name_en: 'PE & Health' },
+  { key: 'bild',      name_sv: 'Bild',                    name_en: 'Visual Arts' },
+  { key: 'musik',     name_sv: 'Musik',                   name_en: 'Music' },
+];
+const SUBJECTS_GYMNASIUM = [
+  { key: 'SVESVE01', name_sv: 'Svenska 1' },
+  { key: 'SVESVE02', name_sv: 'Svenska 2' },
+  { key: 'MATMAT01a', name_sv: 'Matematik 1a' },
+  { key: 'MATMAT01b', name_sv: 'Matematik 1b' },
+  { key: 'MATMAT01c', name_sv: 'Matematik 1c' },
+  { key: 'ENGENG05', name_sv: 'Engelska 5' },
+  { key: 'ENGENG06', name_sv: 'Engelska 6' },
+  { key: 'HISHIS01a1', name_sv: 'Historia 1a1' },
+  { key: 'NAKNAK01a1', name_sv: 'Naturkunskap 1a1' },
+  { key: 'SAMSAM01a1', name_sv: 'Samhällskunskap 1a1' },
+];
+
+// Frånvarokollen-style mock rows
+const MOCK_LESSONS = [
+  { id: 'l1', time: '08:00 – 09:00', class: '6B', subject: 'NO',        subjectKey: 'no',        grade: 6, room: 'Labb',      teacher: 'H. Karlsson', length: 60 },
+  { id: 'l2', time: '08:00 – 09:00', class: '7B', subject: 'Matematik', subjectKey: 'matematik', grade: 7, room: 'Västra 208', teacher: 'Å. Lund',      length: 60 },
+  { id: 'l3', time: '10:00 – 11:00', class: '6B', subject: 'NO',        subjectKey: 'no',        grade: 6, room: 'NO-sal',    teacher: 'H. Karlsson', length: 60 },
+];
+
+// ============================================================
+// Stub generator — canned content. Real version uses LLM.
+// ============================================================
+function stubGenerate({ subject, subjectKey, grade, language, durationMinutes, addOns, learningGoal }) {
+  const isSv = language === 'sv';
+  const isMath = subjectKey === 'matematik' || /MATMAT/.test(subjectKey);
+  const isNO = subjectKey === 'no';
+  if (isMath) return mathPlan(isSv, grade, durationMinutes, addOns, subjectKey);
+  if (isNO) return sciencePlan(isSv, grade, durationMinutes, addOns);
+  return genericPlan(isSv, subject, grade, durationMinutes, addOns, subjectKey, learningGoal);
+}
+
+function mathPlan(isSv, grade, dur, addOns, subjKey) {
+  const total = dur || 60;
+  const intro = Math.round(total * 0.16);
+  const main = Math.round(total * 0.55);
+  const wrap = total - intro - main - 5;
+  const subjectLabel = subjKey?.startsWith('MAT') ? 'Matematik 1' + subjKey.slice(-1) : 'Matematik';
+  return isSv ? {
+    title: 'Bråk i vardagen',
+    summary: `En ${total}-minuters lektion där eleverna utforskar bråk genom konkreta vardagsexempel.`,
+    learningGoal: 'Jag kan förklara vad ett bråk är och visa exempel på bråk i min vardag.',
+    curriculumLinks: {
+      identifier: subjKey, nameSv: subjectLabel,
+      centralInnehall: [
+        'Tal i bråk- och decimalform och deras användning i vardagliga situationer.',
+        'Strategier för matematisk problemlösning i vardagliga situationer.',
+      ],
+      kriterier: 'Eleverna ska kunna identifiera och förklara enkla bråk samt lösa problem som involverar bråk i vardagliga sammanhang.',
+    },
+    materialsNeeded: ['Whiteboard och pennor', 'Papper till varje elev', 'Färgade pennor (om möjligt)'],
+    phases: [
+      { title: 'Introduktion', durationMinutes: intro, description: 'Aktivera förkunskaper genom vardagsexempel.',
+        teacherActions: ['Skriv "1/2" på tavlan och fråga: "Var har ni sett detta?"', 'Lyssna på 3-4 svar och skriv upp dem.', 'Säg: "Idag ska vi titta på bråk i vardagen."'],
+        studentActions: ['Räcker upp handen och delar med sig av exempel.', 'Antecknar i sitt block.'] },
+      { title: 'Huvudaktivitet — bråk i vardagen', durationMinutes: main, description: 'Eleverna arbetar i par och ritar 6 vardagsbråk.',
+        teacherActions: ['Dela ut papper till varje par.', 'Säg: "Rita 6 bilder där ni kan se ett bråk. Skriv bråket bredvid."', 'Gå runt. Fråga par som fastnar: "Vad är hela här? Vad är delen?"'],
+        studentActions: ['Diskuterar med sin partner.', 'Ritar 6 vardagsbilder med bråk (pizza, glas, m.m.).', 'Skriver bråket bredvid varje bild.'] },
+      { title: 'Sammanfattning', durationMinutes: wrap, description: 'Par redovisar och bråk samlas på tavlan.',
+        teacherActions: ['Be 4-5 par dela en bild var.', 'Skriv alla bråk på tavlan.', 'Fråga: "Vilket bråk är störst? Hur vet vi det?"'],
+        studentActions: ['Visar sin bild och förklarar bråket.', 'Jämför olika bråk muntligt.'] },
+    ],
+    exitExercise: addOns?.exitExercise === false ? undefined : {
+      title: 'Bråk-biljett ut', durationMinutes: 5,
+      description: 'Varje elev skriver på en lapp: ett bråk de såg under lektionen + en plats där de tror de kommer se bråk imorgon. Lämna lappen vid dörren.',
+    },
+    extraActivities: addOns?.extraActivities ? [
+      { title: 'Bråk-bingo', description: 'Rita 9 rutor med olika bråk och låt en partner kalla ut dem. Först med rad ropar bingo.' },
+      { title: 'Bråk-jakt i klassrummet', description: 'Hitta 5 saker i klassrummet som kan delas i bråk. Skriv upp dem.' },
+    ] : undefined,
+    differentiation: addOns?.differentiation ? {
+      stod: ['Erbjud konkret material (klossar/papperscirklar) till elever som behöver något att hålla i.', 'Börja med 1/2 och 1/4 innan andra bråk introduceras.', 'Para ihop med stark elev som modellerar tänkandet högt.'],
+      utmaning: ['Be eleven jämföra två bråk med olika nämnare och förklara vilket som är störst.', 'Introducera blandade tal: 1 1/2 — var i vardagen syns det?', 'Be eleven hitta ett bråk som är större än 1/2 men mindre än 3/4.'],
+    } : undefined,
+    vikarieNotes: [
+      'Om eleverna säger "jag har aldrig sett bråk" — ge ett exempel: "Hälften av en macka."',
+      'Vanlig fallgrop: elever skriver bara siffror. Insistera på en bild först, bråket kommer naturligt.',
+      'Det går bra om diskussionen blir livlig — det betyder att de tänker.',
+    ],
+  } : {
+    title: 'Fractions in everyday life',
+    summary: `A ${total}-minute lesson where students explore fractions through concrete everyday examples.`,
+    learningGoal: 'I can explain what a fraction is and give examples of fractions in my everyday life.',
+    curriculumLinks: {
+      identifier: subjKey, nameSv: subjectLabel,
+      centralInnehall: [
+        'Numbers in fraction and decimal form and their use in everyday situations.',
+        'Strategies for mathematical problem-solving in everyday situations.',
+      ],
+      kriterier: 'Students should identify and explain simple fractions, and solve problems involving fractions in everyday contexts.',
+    },
+    materialsNeeded: ['Whiteboard and markers', 'Paper for each student', 'Colored pencils if available'],
+    phases: [
+      { title: 'Introduction', durationMinutes: intro, description: 'Activate prior knowledge using everyday examples.',
+        teacherActions: ['Write "1/2" on the board. Ask: "Where have you seen this?"', 'Listen to 3-4 answers, write them up.', 'Say: "Today we look at fractions in our daily lives."'],
+        studentActions: ['Raise hands and share examples.', 'Take notes.'] },
+      { title: 'Main activity — fractions around us', durationMinutes: main, description: 'Pairs draw 6 everyday fractions.',
+        teacherActions: ['Hand out paper to each pair.', 'Say: "Draw 6 pictures where you can see a fraction. Write the fraction next to each."', 'Walk around. For stuck pairs: "What is the whole? What is the part?"'],
+        studentActions: ['Discuss with partner.', 'Draw 6 everyday fraction images.', 'Write the fraction next to each image.'] },
+      { title: 'Wrap-up', durationMinutes: wrap, description: 'Pairs share and fractions get collected on the board.',
+        teacherActions: ['Ask 4-5 pairs to share one image each.', 'Write each fraction on the board.', 'Ask: "Which is biggest? How do we know?"'],
+        studentActions: ['Show image and explain the fraction.', 'Compare fractions verbally.'] },
+    ],
+    exitExercise: addOns?.exitExercise === false ? undefined : {
+      title: 'Fraction exit ticket', durationMinutes: 5,
+      description: 'Each student writes on a slip: one fraction they saw today + one place they expect to see a fraction tomorrow. Drop at door on the way out.',
+    },
+    extraActivities: addOns?.extraActivities ? [
+      { title: 'Fraction bingo', description: 'Draw 9 squares with different fractions. Partner calls them out. First row wins.' },
+      { title: 'Classroom fraction hunt', description: 'Find 5 objects in the room that can be split into fractions. Write them down.' },
+    ] : undefined,
+    differentiation: addOns?.differentiation ? {
+      stod: ['Offer manipulatives (blocks/paper circles) for students who need something to hold.', 'Start with 1/2 and 1/4 only.', 'Pair with a strong peer who models thinking aloud.'],
+      utmaning: ['Compare two fractions with different denominators — which is bigger and why?', 'Introduce mixed numbers: 1 1/2 — where in daily life?', 'Find a fraction larger than 1/2 but smaller than 3/4.'],
+    } : undefined,
+    vikarieNotes: [
+      'If a student says "I\'ve never seen a fraction" — give an example: "Half a sandwich."',
+      'Common pitfall: students just write numbers. Insist on a drawing first.',
+      'Lively discussion is a good sign — it means they\'re thinking.',
+    ],
+  };
+}
+
+function sciencePlan(isSv, grade, dur, addOns) {
+  const total = dur || 60;
+  return isSv ? {
+    title: 'Vattnets kretslopp',
+    summary: `En ${total}-minuters lektion där eleverna observerar och förklarar vattnets kretslopp.`,
+    learningGoal: 'Jag kan förklara vattnets kretslopp och varför det är viktigt för livet på jorden.',
+    curriculumLinks: {
+      identifier: 'no', nameSv: 'Naturorienterande ämnen',
+      centralInnehall: [
+        'Vattnets olika former: fast, flytande och gas.',
+        'Enkel partikelmodell för att beskriva och förklara materiens uppbyggnad och kretslopp.',
+      ],
+      kriterier: 'Eleven beskriver vattnets kretslopp med naturvetenskapliga begrepp och kopplar det till vardagsobservationer.',
+    },
+    materialsNeeded: ['Whiteboard', 'Genomskinlig plastpåse', 'Lite vatten', 'Tejp och en solig fönsterplats'],
+    phases: [
+      { title: 'Observation', durationMinutes: 10, description: 'Sätt upp ett mini-kretslopp som körs i bakgrunden.',
+        teacherActions: ['Häll en skvätt vatten i plastpåsen, tejpa upp på fönstret.', 'Säg: "Titta hit då och då. Vi pratar om det senare."'],
+        studentActions: ['Tittar på påsen.', 'Antecknar vad de ser.'] },
+      { title: 'Genomgång', durationMinutes: 25, description: 'Rita kretsloppet på tavlan tillsammans.',
+        teacherActions: ['Rita en sjö, en sol, ett moln, regn på tavlan.', 'Fråga: "Vad händer mellan sjön och molnet?"', 'Skriv in begreppen avdunstning, kondensation, nederbörd.'],
+        studentActions: ['Föreslår vad som händer.', 'Ritar av i sitt block.'] },
+      { title: 'Tillämpning', durationMinutes: total - 40, description: 'Para ihop och förklara påsen.',
+        teacherActions: ['Be par titta på påsen igen.', 'Fråga: "Var i kretsloppet är påsen?"'],
+        studentActions: ['Diskuterar i par.', 'Förklarar med begreppen.'] },
+    ],
+    exitExercise: addOns?.exitExercise === false ? undefined : {
+      title: 'Tre ord ut', durationMinutes: 5,
+      description: 'Varje elev säger högt ett av begreppen (avdunstning, kondensation, nederbörd) på vägen ut.',
+    },
+    differentiation: addOns?.differentiation ? {
+      stod: ['Ge en färdig kretsloppsbild att fylla i begreppen på.', 'Använd egen mugg + vatten som exempel istället för påsen.'],
+      utmaning: ['Be eleven förklara var saltvatten passar in.', 'Introducera grundvatten och be eleven utöka diagrammet.'],
+    } : undefined,
+    vikarieNotes: [
+      'Påsen ska inte stå i direkt sol mer än 20 min — den blir för varm.',
+      'Om vattnet inte hinner avdunsta, peka istället på en kall flaska + handflata.',
+      'Yngre elever fastnar ofta på "regnet faller ner" — bygg vidare därifrån.',
+    ],
+  } : {
+    title: 'The water cycle',
+    summary: `A ${total}-minute lesson where students observe and explain the water cycle.`,
+    learningGoal: 'I can explain the water cycle and why it matters for life on Earth.',
+    curriculumLinks: {
+      identifier: 'no', nameSv: 'Naturorienterande ämnen (NO)',
+      centralInnehall: [
+        'The different states of water: solid, liquid, gas.',
+        'Simple particle model for matter and its cycles.',
+      ],
+      kriterier: 'The student describes the water cycle using scientific concepts and links it to everyday observations.',
+    },
+    materialsNeeded: ['Whiteboard', 'Clear plastic bag', 'A little water', 'Tape and a sunny window'],
+    phases: [
+      { title: 'Observation', durationMinutes: 10, description: 'Set up a mini cycle running in the background.',
+        teacherActions: ['Pour water into the bag, tape it on the window.', 'Say: "Glance at it now and then. We\'ll discuss later."'],
+        studentActions: ['Watch the bag.', 'Note what they see.'] },
+      { title: 'Walk-through', durationMinutes: 25, description: 'Draw the cycle together on the board.',
+        teacherActions: ['Draw a lake, sun, cloud, rain on the board.', 'Ask: "What happens between lake and cloud?"', 'Add the terms evaporation, condensation, precipitation.'],
+        studentActions: ['Suggest what happens.', 'Copy into notebook.'] },
+      { title: 'Application', durationMinutes: total - 40, description: 'Pair up and explain the bag.',
+        teacherActions: ['Ask pairs to look at the bag again.', 'Ask: "Where in the cycle is the bag?"'],
+        studentActions: ['Discuss in pairs.', 'Explain using the terms.'] },
+    ],
+    exitExercise: addOns?.exitExercise === false ? undefined : {
+      title: 'Three words out', durationMinutes: 5,
+      description: 'Each student says one term (evaporation, condensation, precipitation) out loud on the way out.',
+    },
+    differentiation: addOns?.differentiation ? {
+      stod: ['Provide a pre-drawn cycle diagram for labeling.', 'Use a cup + water by hand as a simpler example.'],
+      utmaning: ['Ask where saltwater fits in.', 'Introduce groundwater — extend the diagram.'],
+    } : undefined,
+    vikarieNotes: [
+      'Don\'t leave the bag in direct sun for more than 20 minutes — gets too hot.',
+      'If evaporation is too slow, point at a cold bottle + warm palm instead.',
+      'Younger students often stop at "rain falls" — build from there.',
+    ],
+  };
+}
+
+function genericPlan(isSv, subject, grade, dur, addOns, subjKey, goal) {
+  const total = dur || 60;
+  return isSv ? {
+    title: `Lektion: ${subject}`,
+    summary: `En ${total}-minuters lektion i ${subject}${grade ? ' för årskurs ' + grade : ''}.`,
+    learningGoal: goal || `Jag kan delta aktivt och förklara dagens nyckelord i ${subject}.`,
+    curriculumLinks: {
+      identifier: subjKey, nameSv: subject,
+      centralInnehall: [`Centralt innehåll för ${subject} hämtas från Skolverket vid riktig generering.`],
+      kriterier: 'Betygskriterier hämtas vid riktig generering.',
+    },
+    materialsNeeded: ['Whiteboard', 'Papper'],
+    phases: [
+      { title: 'Introduktion', durationMinutes: 10, description: 'Introducera dagens ämne.',
+        teacherActions: ['Hälsa klassen.', 'Skriv målet på tavlan.'], studentActions: ['Lyssnar och antecknar.'] },
+      { title: 'Huvudaktivitet', durationMinutes: total - 20, description: 'Arbete i par eller individuellt.',
+        teacherActions: ['Dela ut uppgift.', 'Stötta efter behov.'], studentActions: ['Arbetar med uppgiften.'] },
+      { title: 'Avslutning', durationMinutes: 10, description: 'Sammanfattning.',
+        teacherActions: ['Be elever dela en sak de lärt sig.'], studentActions: ['Reflekterar och delar.'] },
+    ],
+    exitExercise: addOns?.exitExercise === false ? undefined : { title: 'Exit-fråga', durationMinutes: 3, description: 'En sak du tar med dig från idag.' },
+    vikarieNotes: ['Detta är ett mockup-svar — riktigt innehåll genereras av LLM med curriculum-injektion.'],
+  } : {
+    title: `Lesson: ${subject}`,
+    summary: `A ${total}-minute lesson in ${subject}${grade ? ' for grade ' + grade : ''}.`,
+    learningGoal: goal || `I can participate actively and explain today's key concepts in ${subject}.`,
+    curriculumLinks: {
+      identifier: subjKey, nameSv: subject,
+      centralInnehall: [`Central content for ${subject} loaded from Skolverket at real generation time.`],
+      kriterier: 'Grading criteria loaded at real generation time.',
+    },
+    materialsNeeded: ['Whiteboard', 'Paper'],
+    phases: [
+      { title: 'Introduction', durationMinutes: 10, description: "Introduce today's topic.",
+        teacherActions: ['Welcome the class.', 'Write the goal on the board.'], studentActions: ['Listen and take notes.'] },
+      { title: 'Main activity', durationMinutes: total - 20, description: 'Pair or individual work.',
+        teacherActions: ['Hand out task.', 'Support as needed.'], studentActions: ['Work on task.'] },
+      { title: 'Wrap-up', durationMinutes: 10, description: 'Summary.',
+        teacherActions: ['Ask students for one takeaway.'], studentActions: ['Reflect and share.'] },
+    ],
+    exitExercise: addOns?.exitExercise === false ? undefined : { title: 'Exit question', durationMinutes: 3, description: 'One thing you take with you from today.' },
+    vikarieNotes: ['Mockup response — real content is generated by the LLM with curriculum injection.'],
+  };
+}
+
+// ============================================================
+// Translations
+// ============================================================
+const T = {
+  sv: {
+    appTitle: 'Lektionsplanering',
+    appSub: 'Mockup-modul för Frånvarokollen',
+    dailyCover: 'Daglig täckning', studio: 'Studio',
+    quickHeader: 'Skapa lektion',
+    quickSubheader: 'Genererar lektionsplan + avslutningsövning',
+    generating: 'Genererar lektion…',
+    print: 'Skriv ut', copy: 'Kopiera', copied: 'Kopierat!',
+    saveToLesson: 'Spara till lektionen', saved: 'Sparad', regenerate: 'Generera om',
+    sendToSub: 'Skicka till vikarien', linkCopied: 'Länk kopierad',
+    openFullPage: 'Öppna sida',
+    studioTitle: 'Lektionsplaneringens studio',
+    studioSub: 'Finjustera alla parametrar och välj tillägg',
+    stage: 'Skolform', grundskola: 'Grundskola', gymnasium: 'Gymnasium',
+    subject: 'Ämne', grade: 'Årskurs', duration: 'Lektionslängd (min)', language: 'Språk',
+    learningGoal: 'Lärandemål (valfritt)', learningGoalPh: 'T.ex. eleverna förstår bråk genom vardagsexempel',
+    materials: 'Material som finns (valfritt)', materialsPh: 'whiteboard, papper, surfplattor',
+    groupSize: 'Antal elever', tone: 'Ton (valfritt)', tonePh: 'lugn, energisk, repetition…',
+    addOns: 'Tillägg', extraActs: 'Extra aktiviteter (för elever som blir klara tidigt)',
+    exitEx: 'Avslutningsövning', diff: 'Differentiering (stöd + utmaning)',
+    generate: 'Generera lektion',
+    summary: 'Sammanfattning', goal: 'Mål', curriculum: 'Läroplanskoppling',
+    centralInnehall: 'Centralt innehåll', kriterier: 'Betygskriterier',
+    materialsTitle: 'Material som behövs', flow: 'Lektionsflöde',
+    teacherDoes: 'Vikarien gör', studentsDo: 'Eleverna gör',
+    exitExTitle: 'Avslutningsövning', extraActsTitle: 'Extra aktiviteter',
+    diffTitle: 'Differentiering', stod: 'Stöd', utmaning: 'Utmaning',
+    vikarieNotes: 'Anmärkningar för vikarien',
+    quickButton: 'Skapa lektion', viewPlan: 'Visa lektionsplan',
+    backendStub: 'Stub-läge (offline mockup)', min: 'min',
+    subViewTitle: 'Din lektion idag', subViewSub: 'Vikarie-vy (mobil)',
+    backToList: 'Tillbaka till listan',
+    fullPageTitle: 'Lektionsplan',
+    aboutTitle: 'Om denna prototyp',
+    aboutBody: 'Detta är en prototyp som visar hur Frånvarokollen kan generera lektionsplaner när lärare är frånvarande. Klicka "Skapa lektion" på en rad nedan, eller utforska Studio-fliken för fullständig kontroll.',
+  },
+  en: {
+    appTitle: 'Lesson plan generator',
+    appSub: 'Mockup module for Frånvarokollen',
+    dailyCover: 'Daily Cover', studio: 'Studio',
+    quickHeader: 'Create lesson',
+    quickSubheader: 'Generates lesson plan + exit exercise',
+    generating: 'Generating lesson…',
+    print: 'Print', copy: 'Copy', copied: 'Copied!',
+    saveToLesson: 'Save to lesson', saved: 'Saved', regenerate: 'Regenerate',
+    sendToSub: 'Send to substitute', linkCopied: 'Link copied',
+    openFullPage: 'Open page',
+    studioTitle: 'Lesson Plan Studio', studioSub: 'Fine-tune every parameter and choose add-ons',
+    stage: 'Stage', grundskola: 'Compulsory school', gymnasium: 'Upper secondary',
+    subject: 'Subject', grade: 'Grade', duration: 'Duration (min)', language: 'Language',
+    learningGoal: 'Learning goal (optional)', learningGoalPh: 'E.g. students understand fractions through everyday examples',
+    materials: 'Materials available (optional)', materialsPh: 'whiteboard, paper, tablets',
+    groupSize: 'Group size', tone: 'Tone (optional)', tonePh: 'calm, energetic, exam-prep…',
+    addOns: 'Add-ons', extraActs: 'Extra activities (for early finishers)',
+    exitEx: 'Exit exercise', diff: 'Differentiation (support + challenge)',
+    generate: 'Generate lesson',
+    summary: 'Summary', goal: 'Goal', curriculum: 'Curriculum link',
+    centralInnehall: 'Central content', kriterier: 'Grading criteria',
+    materialsTitle: 'Materials needed', flow: 'Lesson flow',
+    teacherDoes: 'Substitute does', studentsDo: 'Students do',
+    exitExTitle: 'Exit exercise', extraActsTitle: 'Extra activities',
+    diffTitle: 'Differentiation', stod: 'Support', utmaning: 'Challenge',
+    vikarieNotes: 'Notes for the substitute',
+    quickButton: 'Create lesson', viewPlan: 'View plan',
+    backendStub: 'Stub mode (offline mockup)', min: 'min',
+    subViewTitle: 'Your lesson today', subViewSub: 'Substitute view (mobile)',
+    backToList: 'Back to list',
+    fullPageTitle: 'Lesson plan',
+    aboutTitle: 'About this prototype',
+    aboutBody: 'This is a prototype showing how Frånvarokollen could generate lesson plans when teachers are absent. Click "Create lesson" on a row below, or explore the Studio tab for full control.',
+  },
+};
+
+// ============================================================
+// Tiny hash router so the standalone full page + sub view work
+// without React Router.
+// ============================================================
+function useHashRoute() {
+  const [route, setRoute] = useState(window.location.hash || '#/');
+  useEffect(() => {
+    const onHash = () => setRoute(window.location.hash || '#/');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  return [route, (r) => { window.location.hash = r; }];
+}
+
+// Plans saved during this session — keyed by lesson id. In-memory only.
+const planStore = (() => {
+  const map = new Map();
+  return {
+    get: (id) => map.get(id),
+    set: (id, plan, lesson) => map.set(id, { plan, lesson, savedAt: Date.now() }),
+  };
+})();
+
+// ============================================================
+// App
+// ============================================================
+function App() {
+  const [route, navigate] = useHashRoute();
+  const [lang, setLang] = useState('sv');
+  const t = T[lang];
+
+  // Route parsing
+  const parsed = useMemo(() => parseRoute(route), [route]);
+
+  // Standalone full page route
+  if (parsed.kind === 'plan') {
+    return <FullPagePlan lessonId={parsed.lessonId} t={t} lang={lang} setLang={setLang} navigate={navigate} />;
+  }
+  if (parsed.kind === 'sub') {
+    return <SubView lessonId={parsed.lessonId} t={t} lang={lang} setLang={setLang} navigate={navigate} />;
+  }
+
+  return <CoordinatorApp t={t} lang={lang} setLang={setLang} navigate={navigate} />;
+}
+
+function parseRoute(route) {
+  // Supports #/plan/{lessonId} and #/sub/{lessonId}
+  const stripped = route.replace(/^#/, '');
+  const parts = stripped.split('/').filter(Boolean);
+  if (parts[0] === 'plan' && parts[1]) return { kind: 'plan', lessonId: parts[1] };
+  if (parts[0] === 'sub' && parts[1])  return { kind: 'sub',  lessonId: parts[1] };
+  return { kind: 'home' };
+}
+
+// ============================================================
+// Coordinator app (Daily Cover + Studio)
+// ============================================================
+function CoordinatorApp({ t, lang, setLang, navigate }) {
+  const [view, setView] = useState('list');
+  const [quickPlan, setQuickPlan] = useState(null);
+  const [generating, setGenerating] = useState(false);
+
+  // Force a re-render when a plan gets saved (so row buttons flip to "View plan")
+  const [savedTick, setSavedTick] = useState(0);
+
+  async function handleQuickGenerate(lesson) {
+    setGenerating(true);
+    setQuickPlan({ lesson, plan: null, saved: false });
+    await new Promise(r => setTimeout(r, 700));
+    const plan = stubGenerate({
+      subject: lesson.subject, subjectKey: lesson.subjectKey, grade: lesson.grade,
+      language: lang, durationMinutes: lesson.length,
+      addOns: { exitExercise: true },
+    });
+    setQuickPlan({ lesson, plan, saved: !!planStore.get(lesson.id) });
+    setGenerating(false);
+  }
+
+  function handleViewSaved(lesson) {
+    const stored = planStore.get(lesson.id);
+    if (stored) setQuickPlan({ lesson, plan: stored.plan, saved: true });
+  }
+
+  function handleSave() {
+    if (!quickPlan?.plan) return;
+    planStore.set(quickPlan.lesson.id, quickPlan.plan, quickPlan.lesson);
+    setQuickPlan({ ...quickPlan, saved: true });
+    setSavedTick(s => s + 1);
+  }
+
+  return (
+    <Shell t={t} lang={lang} setLang={setLang} view={view} setView={setView}>
+      {view === 'list' && (
+        <DailyCoverList
+          key={savedTick}
+          lessons={MOCK_LESSONS}
+          onQuickGen={handleQuickGenerate}
+          onViewSaved={handleViewSaved}
+          t={t} lang={lang}
+        />
+      )}
+      {view === 'studio' && <Studio t={t} lang={lang} />}
+
+      {quickPlan && (
+        <QuickModal
+          lesson={quickPlan.lesson}
+          plan={quickPlan.plan}
+          generating={generating}
+          saved={quickPlan.saved}
+          onClose={() => setQuickPlan(null)}
+          onRegenerate={() => handleQuickGenerate(quickPlan.lesson)}
+          onSave={handleSave}
+          onOpenFull={() => { handleSave(); navigate(`/plan/${quickPlan.lesson.id}`); }}
+          onSendToSub={() => {
+            handleSave();
+            const url = `${location.origin}${location.pathname}#/sub/${quickPlan.lesson.id}`;
+            navigator.clipboard?.writeText(url);
+            alert(t.linkCopied + '\n\n' + url);
+          }}
+          t={t}
+        />
+      )}
+    </Shell>
+  );
+}
+
+// ============================================================
+// Shell — top bar, language toggle, page width
+// ============================================================
+function Shell({ children, t, lang, setLang, view, setView }) {
+  return (
+    <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 18px 60px' }}>
+      <header className="no-print" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 19, fontWeight: 500, letterSpacing: '-0.01em' }}>
+              {t.appTitle}
+              <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', fontSize: 14, marginLeft: 8 }}>· {t.appSub}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{t.backendStub}</span>
+            <LangToggle lang={lang} setLang={setLang} />
+          </div>
+        </div>
+
+        {(view !== undefined) && (
+          <div style={{ display: 'flex', gap: 4, borderBottom: '0.5px solid var(--border-subtle)', paddingBottom: 6, marginBottom: 18 }}>
+            <TabBtn active={view === 'list'} onClick={() => setView('list')}>{t.dailyCover}</TabBtn>
+            <TabBtn active={view === 'studio'} onClick={() => setView('studio')}>{t.studio}</TabBtn>
+          </div>
+        )}
+      </header>
+
+      {children}
+    </div>
+  );
+}
+
+function LangToggle({ lang, setLang }) {
+  return (
+    <div style={{ display: 'flex', border: '0.5px solid var(--border-default)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+      <button onClick={() => setLang('sv')} style={langBtnStyle(lang === 'sv')}>SV</button>
+      <button onClick={() => setLang('en')} style={langBtnStyle(lang === 'en')}>EN</button>
+    </div>
+  );
+}
+function langBtnStyle(active) {
+  return {
+    padding: '4px 10px', fontSize: 12, fontWeight: 500,
+    background: active ? 'var(--bg-info)' : 'transparent',
+    color: active ? 'var(--text-info)' : 'var(--text-secondary)',
+    border: 'none',
+  };
+}
+function TabBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '6px 12px', fontSize: 14, fontWeight: 500,
+      background: active ? 'var(--bg-secondary)' : 'transparent',
+      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+      border: 'none', borderRadius: 'var(--radius-md)',
+    }}>{children}</button>
+  );
+}
+
+function primaryBtn(extra = {}) {
+  return {
+    padding: '8px 14px', fontSize: 13, fontWeight: 500,
+    background: 'var(--bg-info)', color: 'var(--text-info)',
+    border: '0.5px solid var(--border-info)',
+    borderRadius: 'var(--radius-md)', whiteSpace: 'nowrap', ...extra,
+  };
+}
+function ghostBtn(extra = {}) {
+  return {
+    padding: '7px 12px', fontSize: 13,
+    background: 'transparent', color: 'var(--text-secondary)',
+    border: '0.5px solid var(--border-default)',
+    borderRadius: 'var(--radius-md)', ...extra,
+  };
+}
+function successBtn(extra = {}) {
+  return {
+    padding: '8px 14px', fontSize: 13, fontWeight: 500,
+    background: 'var(--bg-success)', color: 'var(--text-success)',
+    border: '0.5px solid #639922',
+    borderRadius: 'var(--radius-md)', whiteSpace: 'nowrap', ...extra,
+  };
+}
+
+// ============================================================
+// Daily Cover list
+// ============================================================
+function DailyCoverList({ lessons, onQuickGen, onViewSaved, t, lang }) {
+  return (
+    <div>
+      <div style={{
+        background: 'var(--bg-info)', color: 'var(--text-info)',
+        borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: 18, fontSize: 13,
+      }}>
+        <strong style={{ fontWeight: 500 }}>{t.aboutTitle}</strong> — {t.aboutBody}
+      </div>
+
+      <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 500 }}>{t.dailyCover}</h3>
+      <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)' }}>
+        {lang === 'sv'
+          ? 'Klicka på "Skapa lektion" för en snabb plan + avslutningsövning.'
+          : 'Click "Create lesson" for a quick plan + exit exercise.'}
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {lessons.map(l => (
+          <LessonRow key={l.id} lesson={l} onQuickGen={() => onQuickGen(l)} onViewSaved={() => onViewSaved(l)} t={t} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LessonRow({ lesson, onQuickGen, onViewSaved, t }) {
+  const stored = planStore.get(lesson.id);
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      border: '0.5px solid var(--border-subtle)',
+      borderLeft: '3px solid var(--border-warning)',
+      borderRadius: 0,
+      borderTopRightRadius: 'var(--radius-md)', borderBottomRightRadius: 'var(--radius-md)',
+      padding: '12px 14px',
+      display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center',
+    }}>
+      <div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 2, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 500, fontSize: 14 }}>{lesson.class}</span>
+          <span style={{ fontSize: 14 }}>{lesson.subject}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>· {lesson.room}</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          {lesson.teacher} · {lesson.time} · {lesson.length} {t.min}
+        </div>
+      </div>
+      {stored
+        ? <button onClick={onViewSaved} style={successBtn()}>✓ {t.viewPlan}</button>
+        : <button onClick={onQuickGen} style={primaryBtn()}>{t.quickButton}</button>}
+    </div>
+  );
+}
+
+// ============================================================
+// Quick modal
+// ============================================================
+function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, onSave, onOpenFull, onSendToSub, t }) {
+  const [copyHint, setCopyHint] = useState(false);
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'var(--bg-modal-overlay)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: '40px 16px', zIndex: 50, overflowY: 'auto',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg-surface)',
+        border: '0.5px solid var(--border-default)',
+        borderRadius: 'var(--radius-lg)',
+        width: '100%', maxWidth: 680,
+      }}>
+        <div style={{
+          padding: '14px 18px', borderBottom: '0.5px solid var(--border-subtle)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+        }}>
+          <div>
+            <div style={{ fontWeight: 500, fontSize: 15 }}>{t.quickHeader}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              {lesson.class} · {lesson.subject} · {lesson.length} {t.min}
+            </div>
+          </div>
+          <button onClick={onClose} style={ghostBtn({ padding: '4px 10px' })}>✕</button>
+        </div>
+
+        {generating || !plan
+          ? <LoadingSpinner label={t.generating} />
+          : <div style={{ padding: '16px 18px' }}><PlanView plan={plan} t={t} /></div>}
+
+        {!generating && plan && (
+          <div style={{
+            padding: '12px 18px', borderTop: '0.5px solid var(--border-subtle)',
+            display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap',
+          }}>
+            <button onClick={onRegenerate} style={ghostBtn()}>↻ {t.regenerate}</button>
+            <button onClick={() => {
+              navigator.clipboard?.writeText(plainText(plan));
+              setCopyHint(true);
+              setTimeout(() => setCopyHint(false), 1200);
+            }} style={ghostBtn()}>{copyHint ? t.copied : t.copy}</button>
+            <button onClick={() => window.print && window.print()} style={ghostBtn()}>{t.print}</button>
+            <button onClick={onSendToSub} style={ghostBtn()}>{t.sendToSub}</button>
+            <button onClick={onOpenFull} style={ghostBtn()}>{t.openFullPage} →</button>
+            <button onClick={onSave} style={primaryBtn()}>
+              {saved ? '✓ ' + t.saved : t.saveToLesson}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LoadingSpinner({ label }) {
+  return (
+    <div style={{ padding: '48px 18px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+      <div style={{
+        width: 28, height: 28, margin: '0 auto 12px',
+        border: '2px solid var(--border-subtle)',
+        borderTopColor: 'var(--text-info)',
+        borderRadius: '50%',
+        animation: 'lpspin 0.9s linear infinite',
+      }} />
+      <div style={{ fontSize: 13 }}>{label}</div>
+    </div>
+  );
+}
+
+// ============================================================
+// Studio page
+// ============================================================
+function Studio({ t, lang }) {
+  const [stage, setStage] = useState('grundskola');
+  const [subject, setSubject] = useState('matematik');
+  const [grade, setGrade] = useState(5);
+  const [duration, setDuration] = useState(60);
+  const [planLang, setPlanLang] = useState(lang);
+  const [learningGoal, setLearningGoal] = useState('');
+  const [materials, setMaterials] = useState('');
+  const [groupSize, setGroupSize] = useState(24);
+  const [tone, setTone] = useState('');
+  const [extraActs, setExtraActs] = useState(true);
+  const [exitEx, setExitEx] = useState(true);
+  const [diff, setDiff] = useState(true);
+  const [plan, setPlan] = useState(null);
+  const [generating, setGenerating] = useState(false);
+
+  const subjects = useMemo(
+    () => stage === 'grundskola' ? SUBJECTS_GRUNDSKOLA : SUBJECTS_GYMNASIUM,
+    [stage]
+  );
+
+  useEffect(() => {
+    setSubject(stage === 'grundskola' ? 'matematik' : 'MATMAT01b');
+  }, [stage]);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setPlan(null);
+    await new Promise(r => setTimeout(r, 800));
+    const subjMeta = subjects.find(s => s.key === subject);
+    const p = stubGenerate({
+      subject: subjMeta?.name_sv || subject,
+      subjectKey: subject,
+      grade: stage === 'grundskola' ? grade : undefined,
+      language: planLang,
+      durationMinutes: duration,
+      learningGoal: learningGoal.trim() || undefined,
+      addOns: { extraActivities: extraActs, exitExercise: exitEx, differentiation: diff },
+    });
+    setPlan(p);
+    setGenerating(false);
+  }
+
+  return (
+    <div>
+      <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 500 }}>{t.studioTitle}</h3>
+      <p style={{ margin: '0 0 18px', fontSize: 13, color: 'var(--text-secondary)' }}>{t.studioSub}</p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 280px) minmax(0, 1fr)', gap: 18 }}>
+        <div style={{
+          background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
+          padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'flex-start',
+        }}>
+          <Field label={t.stage}>
+            <select value={stage} onChange={e => setStage(e.target.value)}>
+              <option value="grundskola">{t.grundskola}</option>
+              <option value="gymnasium">{t.gymnasium}</option>
+            </select>
+          </Field>
+          <Field label={t.subject}>
+            <select value={subject} onChange={e => setSubject(e.target.value)}>
+              {subjects.map(s => <option key={s.key} value={s.key}>{s.name_sv}</option>)}
+            </select>
+          </Field>
+          {stage === 'grundskola' && (
+            <Field label={t.grade}>
+              <select value={grade} onChange={e => setGrade(Number(e.target.value))}>
+                {[1,2,3,4,5,6,7,8,9].map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label={t.duration}>
+            <select value={duration} onChange={e => setDuration(Number(e.target.value))}>
+              <option value={40}>40</option><option value={60}>60</option>
+              <option value={80}>80</option><option value={90}>90</option>
+            </select>
+          </Field>
+          <Field label={t.language}>
+            <select value={planLang} onChange={e => setPlanLang(e.target.value)}>
+              <option value="sv">Svenska</option>
+              <option value="en">English</option>
+            </select>
+          </Field>
+          <Field label={t.learningGoal}>
+            <textarea rows={2} value={learningGoal} onChange={e => setLearningGoal(e.target.value)} placeholder={t.learningGoalPh} />
+          </Field>
+          <Field label={t.materials}>
+            <input value={materials} onChange={e => setMaterials(e.target.value)} placeholder={t.materialsPh} />
+          </Field>
+          <Field label={t.groupSize}>
+            <input type="number" min={1} max={50} value={groupSize} onChange={e => setGroupSize(Number(e.target.value))} />
+          </Field>
+          <Field label={t.tone}>
+            <input value={tone} onChange={e => setTone(e.target.value)} placeholder={t.tonePh} />
+          </Field>
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>{t.addOns}</div>
+            <Toggle checked={exitEx} onChange={setExitEx} label={t.exitEx} />
+            <Toggle checked={extraActs} onChange={setExtraActs} label={t.extraActs} />
+            <Toggle checked={diff} onChange={setDiff} label={t.diff} />
+          </div>
+          <button onClick={handleGenerate} disabled={generating} style={{ ...primaryBtn(), padding: '10px 14px', marginTop: 6, opacity: generating ? 0.6 : 1 }}>
+            {generating ? t.generating : t.generate}
+          </button>
+        </div>
+
+        <div style={{
+          background: 'var(--bg-surface)', border: '0.5px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-lg)', padding: '16px 18px', minHeight: 240,
+        }}>
+          {generating && <LoadingSpinner label={t.generating} />}
+          {!generating && !plan && (
+            <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
+              {lang === 'sv' ? 'Justera parametrarna och klicka på Generera lektion.' : 'Adjust parameters and click Generate lesson.'}
+            </div>
+          )}
+          {!generating && plan && <PlanView plan={plan} t={t} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+function Toggle({ checked, onChange, label }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, padding: '4px 0' }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ marginTop: 2, width: 'auto' }} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+// ============================================================
+// Plan rendering
+// ============================================================
+function PlanView({ plan, t, compact }) {
+  return (
+    <div>
+      <h3 style={{ margin: '0 0 4px', fontSize: compact ? 18 : 20, fontWeight: 500, lineHeight: 1.3 }}>{plan.title}</h3>
+      <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)' }}>{plan.summary}</p>
+
+      <SectionLabel>{t.goal}</SectionLabel>
+      <div style={{
+        background: 'var(--bg-info)', borderRadius: 'var(--radius-md)',
+        padding: '8px 12px', marginBottom: 14, fontSize: 14, color: 'var(--text-info)',
+      }}>{plan.learningGoal}</div>
+
+      <SectionLabel>{t.materialsTitle}</SectionLabel>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+        {plan.materialsNeeded.map((m, i) => (
+          <span key={i} style={{
+            background: 'var(--bg-secondary)', padding: '3px 9px', borderRadius: 'var(--radius-md)',
+            fontSize: 12, color: 'var(--text-secondary)',
+          }}>{m}</span>
+        ))}
+      </div>
+
+      <SectionLabel>{t.flow}</SectionLabel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+        {plan.phases.map((p, i) => <PhaseCard key={i} phase={p} t={t} index={i + 1} />)}
+      </div>
+
+      {plan.exitExercise && (
+        <>
+          <SectionLabel>{t.exitExTitle}</SectionLabel>
+          <div style={{
+            background: 'var(--bg-success)', color: 'var(--text-success)',
+            borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 14,
+          }}>
+            <div style={{ fontWeight: 500, marginBottom: 2, fontSize: 14 }}>
+              {plan.exitExercise.title}
+              <span style={{ fontSize: 11, opacity: 0.75, fontWeight: 400, marginLeft: 6 }}>
+                · {plan.exitExercise.durationMinutes} {t.min}
+              </span>
+            </div>
+            <div style={{ fontSize: 13 }}>{plan.exitExercise.description}</div>
+          </div>
+        </>
+      )}
+
+      {plan.extraActivities && plan.extraActivities.length > 0 && (
+        <>
+          <SectionLabel>{t.extraActsTitle}</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {plan.extraActivities.map((a, i) => (
+              <div key={i} style={{
+                border: '0.5px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+                padding: '8px 12px', fontSize: 13,
+              }}>
+                <div style={{ fontWeight: 500, marginBottom: 2 }}>{a.title}</div>
+                <div style={{ color: 'var(--text-secondary)' }}>{a.description}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {plan.differentiation && (
+        <>
+          <SectionLabel>{t.diffTitle}</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <DiffCol title={t.stod} items={plan.differentiation.stod} tone="info" />
+            <DiffCol title={t.utmaning} items={plan.differentiation.utmaning} tone="warning" />
+          </div>
+        </>
+      )}
+
+      <SectionLabel>{t.curriculum}</SectionLabel>
+      <div style={{
+        background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
+        padding: '10px 12px', marginBottom: 14, fontSize: 13,
+      }}>
+        <div style={{ fontWeight: 500, marginBottom: 6 }}>
+          {plan.curriculumLinks.nameSv}
+          <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: 6, fontSize: 12 }}>
+            [{plan.curriculumLinks.identifier}]
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, fontWeight: 500 }}>{t.centralInnehall}</div>
+        <ul style={{ margin: '0 0 8px', paddingLeft: 18, fontSize: 13 }}>
+          {plan.curriculumLinks.centralInnehall.map((c, i) => <li key={i} style={{ marginBottom: 2 }}>{c}</li>)}
+        </ul>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, fontWeight: 500 }}>{t.kriterier}</div>
+        <div style={{ fontSize: 13 }}>{plan.curriculumLinks.kriterier}</div>
+      </div>
+
+      {plan.vikarieNotes && plan.vikarieNotes.length > 0 && (
+        <>
+          <SectionLabel>{t.vikarieNotes}</SectionLabel>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-secondary)' }}>
+            {plan.vikarieNotes.map((n, i) => <li key={i} style={{ marginBottom: 4 }}>{n}</li>)}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em',
+      color: 'var(--text-tertiary)', margin: '0 0 6px',
+    }}>{children}</div>
+  );
+}
+function PhaseCard({ phase, t, index }) {
+  return (
+    <div style={{
+      border: '0.5px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+      padding: '10px 12px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <div style={{ fontWeight: 500, fontSize: 14 }}>
+          <span style={{ color: 'var(--text-tertiary)', marginRight: 6 }}>{index}.</span>
+          {phase.title}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{phase.durationMinutes} {t.min}</div>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>{phase.description}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <ActionCol title={t.teacherDoes} items={phase.teacherActions} />
+        <ActionCol title={t.studentsDo} items={phase.studentActions} />
+      </div>
+    </div>
+  );
+}
+function ActionCol({ title, items }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)', marginBottom: 4 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5 }}>
+        {items.map((a, i) => <li key={i} style={{ marginBottom: 2 }}>{a}</li>)}
+      </ul>
+    </div>
+  );
+}
+function DiffCol({ title, items, tone }) {
+  const bg = tone === 'info' ? 'var(--bg-info)' : 'var(--bg-warning)';
+  const fg = tone === 'info' ? 'var(--text-info)' : 'var(--text-warning)';
+  return (
+    <div style={{ background: bg, borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: fg, marginBottom: 6 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: fg }}>
+        {items.map((s, i) => <li key={i} style={{ marginBottom: 3 }}>{s}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+// ============================================================
+// Full page (printable, shareable)
+// ============================================================
+function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
+  const stored = planStore.get(lessonId);
+  if (!stored) {
+    return (
+      <Shell t={t} lang={lang} setLang={setLang}>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          {lang === 'sv'
+            ? 'Ingen lektionsplan hittades. Generera en plan från Daglig täckning först.'
+            : 'No plan found. Generate one from Daily Cover first.'}
+          <div style={{ marginTop: 16 }}>
+            <button onClick={() => navigate('/')} style={ghostBtn()}>{t.backToList}</button>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+  const { plan, lesson } = stored;
+  return (
+    <Shell t={t} lang={lang} setLang={setLang}>
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => navigate('/')} style={ghostBtn()}>← {t.backToList}</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => {
+            const url = `${location.origin}${location.pathname}#/sub/${lessonId}`;
+            navigator.clipboard?.writeText(url);
+            alert(t.linkCopied + '\n\n' + url);
+          }} style={ghostBtn()}>{t.sendToSub}</button>
+          <button onClick={() => window.print && window.print()} style={primaryBtn()}>{t.print}</button>
+        </div>
+      </div>
+
+      <div style={{
+        background: 'var(--bg-surface)', border: '0.5px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)', padding: '22px 26px',
+      }}>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          {t.fullPageTitle} · {lesson.class} · {lesson.subject} · {lesson.time}
+        </div>
+        <PlanView plan={plan} t={t} />
+      </div>
+    </Shell>
+  );
+}
+
+// ============================================================
+// Substitute view (mobile-optimized read-only)
+// ============================================================
+function SubView({ lessonId, t, lang, setLang, navigate }) {
+  const stored = planStore.get(lessonId);
+  if (!stored) {
+    return (
+      <Shell t={t} lang={lang} setLang={setLang}>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          {lang === 'sv'
+            ? 'Länk ogiltig eller utgången. (I produktion: signerad token.)'
+            : 'Link invalid or expired. (Production: signed token.)'}
+        </div>
+      </Shell>
+    );
+  }
+  const { plan, lesson } = stored;
+  return (
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: '18px 16px 60px' }}>
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {t.subViewSub}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 500 }}>{t.subViewTitle}</div>
+        </div>
+        <LangToggle lang={lang} setLang={setLang} />
+      </div>
+
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '0.5px solid var(--border-subtle)',
+        borderLeft: '3px solid var(--border-warning)',
+        borderRadius: 'var(--radius-md)',
+        padding: '12px 14px', marginBottom: 18,
+      }}>
+        <div style={{ fontWeight: 500, fontSize: 15 }}>{lesson.class} · {lesson.subject}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          {lesson.room} · {lesson.time} · {lesson.length} {t.min}
+        </div>
+      </div>
+
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '0.5px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '16px 18px',
+      }}>
+        <PlanView plan={plan} t={t} compact />
+      </div>
+
+      <div className="no-print" style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+        <button onClick={() => window.print && window.print()} style={ghostBtn({ flex: 1 })}>{t.print}</button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Helper — plain-text export for clipboard
+// ============================================================
+function plainText(plan) {
+  const lines = [];
+  lines.push(plan.title);
+  lines.push('');
+  lines.push(plan.summary);
+  lines.push('');
+  lines.push('MÅL: ' + plan.learningGoal);
+  lines.push('');
+  lines.push('MATERIAL: ' + plan.materialsNeeded.join(', '));
+  lines.push('');
+  lines.push('LEKTIONSFLÖDE');
+  plan.phases.forEach((p, i) => {
+    lines.push(`\n${i + 1}. ${p.title} (${p.durationMinutes} min)`);
+    lines.push(p.description);
+    lines.push('Vikarien: ' + p.teacherActions.map(a => '\n  - ' + a).join(''));
+    lines.push('Eleverna: ' + p.studentActions.map(a => '\n  - ' + a).join(''));
+  });
+  if (plan.exitExercise) {
+    lines.push('');
+    lines.push(`AVSLUTNING: ${plan.exitExercise.title} (${plan.exitExercise.durationMinutes} min)`);
+    lines.push(plan.exitExercise.description);
+  }
+  if (plan.vikarieNotes?.length) {
+    lines.push('');
+    lines.push('ANMÄRKNINGAR FÖR VIKARIEN:');
+    plan.vikarieNotes.forEach(n => lines.push('  - ' + n));
+  }
+  return lines.join('\n');
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
