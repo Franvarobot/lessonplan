@@ -4,14 +4,27 @@ A standalone mockup module for **Frånvarokollen** that generates Swedish-curric
 
 > **Status:** prototype / mockup. Built to validate the design and integration approach before wiring into the real backend.
 
+## Try this first
+
+The fastest way to see the full flow:
+
+1. Open Daily Cover, click **Skapa lektion** on the **6B NO** row (richest sample content)
+2. Inside the modal, expand the **+ Lägg till tid** panel — these are the 5/10/15/20 min extensions a substitute can use if they finish early. Click *Varför detta passar* on a card to see how it links back to today's lesson.
+3. Click **Skicka till vikarien** — try each of the three active options to see the preview and copy
+4. Click **Öppna sida →** for the printable full-page view
+5. Copy the SMS link, paste it in a new tab to see the mobile substitute view (the extra-time panel is pre-opened here)
+
+Toggle SV/EN at the top right to see everything in Swedish or English.
+
 ## What it does
 
 When a teacher is absent, the substitution coordinator can:
 
 1. **Quick-generate** — click *Skapa lektion* on any absence row → modal opens with a generated plan + exit exercise tied to Skolverket's Lgr22 / Gy11 curriculum.
 2. **Studio mode** — full control over subject, grade, duration, learning goal, materials, group size, tone, and add-ons (extra activities, differentiation, exit exercises).
-3. **Save + share** — save the plan to the lesson, open it as a printable full page, or copy a signed link to send to the substitute.
-4. **Substitute view** — the vikarie opens the link on their phone and sees a clean, mobile-optimized read-only version of the plan.
+3. **"+ Lägg till tid" panel** — every generated plan includes 4 tiered extra-time activities (5 / 10 / 15 / 20 min) that build directly on what the lesson covered. The substitute can open the panel mid-lesson if they finish early.
+4. **Send to substitute dialog** — one click → choose between copying email text, SMS text, or just the link. The email text includes greeting, date, place, full plan, exit exercise, the extra-time tiers, and a link back to the mobile-friendly view.
+5. **Substitute view** — the vikarie opens the link on their phone and sees a clean, mobile-optimized read-only version of the plan. The "+ Lägg till tid" panel is pre-opened on this view since that's the moment they actually need it.
 
 The whole thing runs in **Swedish or English**, picked per generation.
 
