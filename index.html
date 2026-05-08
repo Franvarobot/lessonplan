@@ -182,6 +182,12 @@ function mathPlan(isSv, grade, dur, addOns, subjKey) {
       'Vanlig fallgrop: elever skriver bara siffror. Insistera på en bild först, bråket kommer naturligt.',
       'Det går bra om diskussionen blir livlig — det betyder att de tänker.',
     ],
+    extraTime: [
+      { minutes: 5, title: 'Bråk-snabbrunda', description: 'Säg ett bråk högt, eleven bredvid säger ett som är större. Gå runt klassen.', linkBack: 'Bygger direkt på bilderna eleverna ritade i huvudaktiviteten.' },
+      { minutes: 10, title: 'Bråk-tärningar', description: 'Skriv 1/2, 1/3, 1/4, 1/5 i fyra hörn av tavlan. Eleverna pekar mot det bråk de tycker är störst. Diskutera varför.', linkBack: 'Vidareutvecklar jämförelsen från sammanfattningen.' },
+      { minutes: 15, title: 'Hitta klassrummets bråk', description: 'Par går runt och hittar 5 nya föremål som kan delas i bråk (utöver vad de redan ritat). Skriv upp på tavlan när de kommer tillbaka.', linkBack: 'Tar bråk-jakten från ritandet ut i den fysiska världen.' },
+      { minutes: 20, title: 'Bråk-berättelse', description: 'Eleverna skriver en kort historia (en halv sida) där minst 4 olika bråk används i vardagen. Två-tre läser upp.', linkBack: 'Kombinerar bråk med språk; befäster begreppen genom att eleverna ska sätta in dem i sammanhang.' },
+    ],
   } : {
     title: 'Fractions in everyday life',
     summary: `A ${total}-minute lesson where students explore fractions through concrete everyday examples.`,
@@ -222,6 +228,12 @@ function mathPlan(isSv, grade, dur, addOns, subjKey) {
       'If a student says "I\'ve never seen a fraction" — give an example: "Half a sandwich."',
       'Common pitfall: students just write numbers. Insist on a drawing first.',
       'Lively discussion is a good sign — it means they\'re thinking.',
+    ],
+    extraTime: [
+      { minutes: 5, title: 'Fraction quick round', description: 'Say a fraction. The student next to you says a bigger one. Go around the class.', linkBack: 'Builds directly on the images students drew in the main activity.' },
+      { minutes: 10, title: 'Fraction corners', description: 'Write 1/2, 1/3, 1/4, 1/5 in four corners of the board. Students point to the fraction they think is largest. Discuss why.', linkBack: 'Extends the comparison from the wrap-up.' },
+      { minutes: 15, title: 'Classroom fraction hunt', description: 'Pairs walk around and find 5 new objects that can be split into fractions (beyond what they already drew). Add to the board on return.', linkBack: 'Takes fraction-spotting from drawings into the physical world.' },
+      { minutes: 20, title: 'Fraction story', description: 'Students write a short story (half a page) using at least 4 different fractions from everyday life. Two-three read aloud.', linkBack: 'Combines fractions with language; reinforces understanding by putting them in context.' },
     ],
   };
 }
@@ -265,6 +277,12 @@ function sciencePlan(isSv, grade, dur, addOns) {
       'Om vattnet inte hinner avdunsta, peka istället på en kall flaska + handflata.',
       'Yngre elever fastnar ofta på "regnet faller ner" — bygg vidare därifrån.',
     ],
+    extraTime: [
+      { minutes: 5, title: 'Var är vi nu?', description: 'Snabbrunda — peka mot en plats i klassrummet och säg vilket steg av kretsloppet det representerar (fönsterruta = kondensation, etc).', linkBack: 'Befäster begreppen från genomgången på 30 sekunder per elev.' },
+      { minutes: 10, title: 'Rita ditt eget kretslopp', description: 'Eleverna ritar kretsloppet i blocket utan att titta på tavlan. Sedan jämför med grannen.', linkBack: 'Repetition utan stöd — visar vad som verkligen fastnat från genomgången.' },
+      { minutes: 15, title: 'Saltvattnets resa', description: 'Para ihop. Hur passar saltvatten in i kretsloppet? Vart tar saltet vägen när vatten avdunstar? Diskutera 5 min, dela 5 min.', linkBack: 'Tillämpar dagens begrepp på en svårare fråga — utmanar de starkare eleverna utan att tappa de svagare.' },
+      { minutes: 20, title: 'Stadens kretslopp', description: 'Eleverna listar 5 platser i Uppsala/staden där man kan se kretsloppet (en pöl, ett moln, en avloppsbrunn, en sjö, ett dimmigt fönster). Rita en karta på tavlan tillsammans.', linkBack: 'Knyter abstrakt naturvetenskap till elevernas vardag och lokala miljö.' },
+    ],
   } : {
     title: 'The water cycle',
     summary: `A ${total}-minute lesson where students observe and explain the water cycle.`,
@@ -301,6 +319,12 @@ function sciencePlan(isSv, grade, dur, addOns) {
       'Don\'t leave the bag in direct sun for more than 20 minutes — gets too hot.',
       'If evaporation is too slow, point at a cold bottle + warm palm instead.',
       'Younger students often stop at "rain falls" — build from there.',
+    ],
+    extraTime: [
+      { minutes: 5, title: 'Where are we now?', description: 'Quick round — point at something in the room and say which step of the cycle it represents (window pane = condensation, etc).', linkBack: 'Reinforces the terms from the walk-through in 30 seconds per student.' },
+      { minutes: 10, title: 'Draw your own cycle', description: 'Students draw the cycle in their notebook without looking at the board. Then compare with their neighbor.', linkBack: 'Repetition without scaffolding — shows what actually stuck from the walk-through.' },
+      { minutes: 15, title: 'The journey of saltwater', description: 'In pairs: how does saltwater fit into the cycle? Where does the salt go when water evaporates? Discuss 5 min, share 5 min.', linkBack: 'Applies today\'s concepts to a harder question — challenges stronger students without losing weaker ones.' },
+      { minutes: 20, title: 'The town\'s water cycle', description: 'Students list 5 places in town where you can see the cycle (a puddle, a cloud, a drain, a lake, a foggy window). Draw a shared map on the board.', linkBack: 'Links abstract science to students\' daily lives and local environment.' },
     ],
   };
 }
@@ -365,6 +389,37 @@ const T = {
     saveToLesson: 'Spara till lektionen', saved: 'Sparad', regenerate: 'Generera om',
     sendToSub: 'Skicka till vikarien', linkCopied: 'Länk kopierad',
     openFullPage: 'Öppna sida',
+    sendDialogTitle: 'Skicka till vikarien',
+    sendDialogSub: 'Välj hur du vill skicka lektionsplanen',
+    sendOptEmail: 'Kopiera mejltext',
+    sendOptEmailDesc: 'Hela planen formaterad för mejl. Klistra in i ditt mejlprogram.',
+    sendOptSms: 'Kopiera SMS-text',
+    sendOptSmsDesc: 'Kort version med datum, plats och en länk till hela planen.',
+    sendOptLink: 'Kopiera bara länken',
+    sendOptLinkDesc: 'Mobilvänlig länk — perfekt om du redan har en mall för mejl.',
+    sendOptIntegrated: 'Skicka via Frånvarokollen',
+    sendOptIntegratedDesc: 'Kräver att vikariens kontaktuppgifter är kopplade. (Snart tillgängligt)',
+    sendDialogPreview: 'Förhandsgranskning',
+    backToOptions: '← Tillbaka',
+    addTimeTitle: '+ Lägg till tid',
+    addTimeSub: 'Förlängningar som bygger på dagens lektion',
+    addTimeWhy: 'Varför detta passar',
+    timeLeft: 'Hur mycket tid har du kvar?',
+    fillerSection: 'Om tid finns kvar',
+    minutes: 'min',
+    coordinatorName: 'Mia Lundgren',
+    schoolReception: '018-xxx xxx',
+    emailGreeting: 'Hej',
+    emailLabelDate: 'Datum',
+    emailLabelPlace: 'Plats',
+    emailLabelSubject: 'Ämne',
+    emailLabelGoal: 'Mål',
+    emailLabelMaterials: 'Material',
+    emailLabelPlan: 'LEKTIONSPLAN',
+    emailLabelExit: 'AVSLUTNING',
+    emailLabelExtra: 'OM TID FINNS KVAR',
+    emailLabelLink: 'Hela planen (mobilvänlig)',
+    emailLabelQuestions: 'Frågor? Ring receptionen på',
     studioTitle: 'Lektionsplaneringens studio',
     studioSub: 'Finjustera alla parametrar och välj tillägg',
     stage: 'Skolform', grundskola: 'Grundskola', gymnasium: 'Gymnasium',
@@ -401,6 +456,37 @@ const T = {
     saveToLesson: 'Save to lesson', saved: 'Saved', regenerate: 'Regenerate',
     sendToSub: 'Send to substitute', linkCopied: 'Link copied',
     openFullPage: 'Open page',
+    sendDialogTitle: 'Send to substitute',
+    sendDialogSub: 'Choose how you want to send the lesson plan',
+    sendOptEmail: 'Copy email text',
+    sendOptEmailDesc: 'Full plan formatted for email. Paste into your mail client.',
+    sendOptSms: 'Copy SMS text',
+    sendOptSmsDesc: 'Short version with date, place and a link to the full plan.',
+    sendOptLink: 'Copy link only',
+    sendOptLinkDesc: 'Mobile-friendly link — ideal if you already have an email template.',
+    sendOptIntegrated: 'Send via Frånvarokollen',
+    sendOptIntegratedDesc: 'Requires the substitute\'s contact info to be linked. (Coming soon)',
+    sendDialogPreview: 'Preview',
+    backToOptions: '← Back',
+    addTimeTitle: '+ Add time',
+    addTimeSub: 'Extensions that build on today\'s lesson',
+    addTimeWhy: 'Why this fits',
+    timeLeft: 'How much time do you have left?',
+    fillerSection: 'If time is left',
+    minutes: 'min',
+    coordinatorName: 'Mia Lundgren',
+    schoolReception: '018-xxx xxx',
+    emailGreeting: 'Hi',
+    emailLabelDate: 'Date',
+    emailLabelPlace: 'Place',
+    emailLabelSubject: 'Subject',
+    emailLabelGoal: 'Goal',
+    emailLabelMaterials: 'Materials',
+    emailLabelPlan: 'LESSON PLAN',
+    emailLabelExit: 'WRAP-UP',
+    emailLabelExtra: 'IF TIME IS LEFT',
+    emailLabelLink: 'Full plan (mobile-friendly)',
+    emailLabelQuestions: 'Questions? Call reception at',
     studioTitle: 'Lesson Plan Studio', studioSub: 'Fine-tune every parameter and choose add-ons',
     stage: 'Stage', grundskola: 'Compulsory school', gymnasium: 'Upper secondary',
     subject: 'Subject', grade: 'Grade', duration: 'Duration (min)', language: 'Language',
@@ -540,13 +626,7 @@ function CoordinatorApp({ t, lang, setLang, navigate }) {
           onRegenerate={() => handleQuickGenerate(quickPlan.lesson)}
           onSave={handleSave}
           onOpenFull={() => { handleSave(); navigate(`/plan/${quickPlan.lesson.id}`); }}
-          onSendToSub={() => {
-            handleSave();
-            const url = `${location.origin}${location.pathname}#/sub/${quickPlan.lesson.id}`;
-            navigator.clipboard?.writeText(url);
-            alert(t.linkCopied + '\n\n' + url);
-          }}
-          t={t}
+          t={t} lang={lang}
         />
       )}
     </Shell>
@@ -708,9 +788,11 @@ function LessonRow({ lesson, onQuickGen, onViewSaved, t }) {
 // ============================================================
 // Quick modal
 // ============================================================
-function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, onSave, onOpenFull, onSendToSub, t }) {
+function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, onSave, onOpenFull, onSendToSub, t, lang }) {
   const [copyHint, setCopyHint] = useState(false);
+  const [sendDialog, setSendDialog] = useState(false);
   return (
+    <>
     <div style={{
       position: 'fixed', inset: 0,
       background: 'var(--bg-modal-overlay)',
@@ -752,7 +834,7 @@ function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, on
               setTimeout(() => setCopyHint(false), 1200);
             }} style={ghostBtn()}>{copyHint ? t.copied : t.copy}</button>
             <button onClick={() => window.print && window.print()} style={ghostBtn()}>{t.print}</button>
-            <button onClick={onSendToSub} style={ghostBtn()}>{t.sendToSub}</button>
+            <button onClick={() => { onSave(); setSendDialog(true); }} style={ghostBtn()}>{t.sendToSub}</button>
             <button onClick={onOpenFull} style={ghostBtn()}>{t.openFullPage} →</button>
             <button onClick={onSave} style={primaryBtn()}>
               {saved ? '✓ ' + t.saved : t.saveToLesson}
@@ -761,6 +843,15 @@ function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, on
         )}
       </div>
     </div>
+
+    {sendDialog && plan && (
+      <SendDialog
+        plan={plan} lesson={lesson} lessonId={lesson.id}
+        onClose={() => setSendDialog(false)}
+        t={t} lang={lang}
+      />
+    )}
+    </>
   );
 }
 
@@ -1016,6 +1107,8 @@ function PlanView({ plan, t, compact }) {
         <div style={{ fontSize: 13 }}>{plan.curriculumLinks.kriterier}</div>
       </div>
 
+      <AddTimePanel plan={plan} t={t} defaultOpen={!!compact} />
+
       {plan.vikarieNotes && plan.vikarieNotes.length > 0 && (
         <>
           <SectionLabel>{t.vikarieNotes}</SectionLabel>
@@ -1084,6 +1177,7 @@ function DiffCol({ title, items, tone }) {
 // Full page (printable, shareable)
 // ============================================================
 function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
+  const [sendDialog, setSendDialog] = useState(false);
   const stored = planStore.get(lessonId);
   if (!stored) {
     return (
@@ -1105,11 +1199,7 @@ function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8, flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/')} style={ghostBtn()}>← {t.backToList}</button>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => {
-            const url = `${location.origin}${location.pathname}#/sub/${lessonId}`;
-            navigator.clipboard?.writeText(url);
-            alert(t.linkCopied + '\n\n' + url);
-          }} style={ghostBtn()}>{t.sendToSub}</button>
+          <button onClick={() => setSendDialog(true)} style={ghostBtn()}>{t.sendToSub}</button>
           <button onClick={() => window.print && window.print()} style={primaryBtn()}>{t.print}</button>
         </div>
       </div>
@@ -1123,6 +1213,14 @@ function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
         </div>
         <PlanView plan={plan} t={t} />
       </div>
+
+      {sendDialog && (
+        <SendDialog
+          plan={plan} lesson={lesson} lessonId={lessonId}
+          onClose={() => setSendDialog(false)}
+          t={t} lang={lang}
+        />
+      )}
     </Shell>
   );
 }
@@ -1186,8 +1284,272 @@ function SubView({ lessonId, t, lang, setLang, navigate }) {
 }
 
 // ============================================================
-// Helper — plain-text export for clipboard
+// AddTimePanel — collapsed accordion the sub opens when there's
+// time left. Tiers built into the plan, link back to today's content.
 // ============================================================
+function AddTimePanel({ plan, t, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (!plan.extraTime?.length) return null;
+
+  return (
+    <div style={{
+      border: '0.5px solid var(--border-default)',
+      borderRadius: 'var(--radius-md)',
+      overflow: 'hidden',
+      marginBottom: 14,
+    }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: '100%', padding: '10px 14px',
+        background: open ? 'var(--bg-secondary)' : 'var(--bg-surface)',
+        border: 'none', textAlign: 'left',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <div>
+          <div style={{ fontWeight: 500, fontSize: 14 }}>{t.addTimeTitle}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.addTimeSub}</div>
+        </div>
+        <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>{open ? '▾' : '▸'}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: '12px 14px', borderTop: '0.5px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>{t.timeLeft}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {plan.extraTime.map((et, i) => <ExtraTimeCard key={i} et={et} t={t} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExtraTimeCard({ et, t }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{
+      border: '0.5px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-md)',
+      padding: '10px 12px',
+      background: 'var(--bg-surface)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+        <div style={{ fontWeight: 500, fontSize: 14 }}>{et.title}</div>
+        <span style={{
+          fontSize: 12, fontWeight: 500,
+          background: 'var(--bg-info)', color: 'var(--text-info)',
+          padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+          whiteSpace: 'nowrap',
+        }}>{et.minutes} {t.minutes}</span>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{et.description}</div>
+      {et.linkBack && (
+        <button onClick={() => setExpanded(e => !e)} style={{
+          marginTop: 6, padding: 0, background: 'none', border: 'none',
+          fontSize: 12, color: 'var(--text-info)', textAlign: 'left',
+        }}>
+          {expanded ? '▾' : '▸'} {t.addTimeWhy}
+        </button>
+      )}
+      {expanded && et.linkBack && (
+        <div style={{
+          marginTop: 6, padding: '8px 10px',
+          background: 'var(--bg-info)', color: 'var(--text-info)',
+          borderRadius: 'var(--radius-sm)', fontSize: 12, fontStyle: 'italic',
+        }}>{et.linkBack}</div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// SendDialog — replaces the simple "send to substitute" alert.
+// Four options: email text, SMS text, link only, integrated send.
+// ============================================================
+function SendDialog({ plan, lesson, lessonId, onClose, t, lang }) {
+  const [preview, setPreview] = useState(null); // null | 'email' | 'sms' | 'link'
+  const [copied, setCopied] = useState(false);
+
+  const previews = useMemo(() => ({
+    email: buildEmailText(plan, lesson, lessonId, t, lang),
+    sms: buildSmsText(plan, lesson, lessonId, t, lang),
+    link: buildLink(lessonId),
+  }), [plan, lesson, lessonId, t, lang]);
+
+  function copy(kind) {
+    const text = previews[kind];
+    navigator.clipboard?.writeText(text);
+    setPreview(kind);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'var(--bg-modal-overlay)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: '40px 16px', zIndex: 60, overflowY: 'auto',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg-surface)',
+        border: '0.5px solid var(--border-default)',
+        borderRadius: 'var(--radius-lg)',
+        width: '100%', maxWidth: 560,
+      }}>
+        <div style={{
+          padding: '14px 18px', borderBottom: '0.5px solid var(--border-subtle)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <div>
+            <div style={{ fontWeight: 500, fontSize: 15 }}>
+              {preview ? t.sendDialogPreview : t.sendDialogTitle}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              {preview
+                ? (preview === 'email' ? t.sendOptEmail : preview === 'sms' ? t.sendOptSms : t.sendOptLink)
+                : t.sendDialogSub}
+            </div>
+          </div>
+          <button onClick={onClose} style={ghostBtn({ padding: '4px 10px' })}>✕</button>
+        </div>
+
+        {!preview && (
+          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SendOption
+              icon="✉️" title={t.sendOptEmail} desc={t.sendOptEmailDesc}
+              onClick={() => copy('email')}
+            />
+            <SendOption
+              icon="💬" title={t.sendOptSms} desc={t.sendOptSmsDesc}
+              onClick={() => copy('sms')}
+            />
+            <SendOption
+              icon="🔗" title={t.sendOptLink} desc={t.sendOptLinkDesc}
+              onClick={() => copy('link')}
+            />
+            <SendOption
+              icon="📤" title={t.sendOptIntegrated} desc={t.sendOptIntegratedDesc}
+              onClick={null} disabled
+            />
+          </div>
+        )}
+
+        {preview && (
+          <div style={{ padding: '14px 18px' }}>
+            <div style={{
+              background: 'var(--bg-secondary)',
+              border: '0.5px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 14px',
+              fontSize: 13, fontFamily: 'var(--font-mono)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              maxHeight: 320, overflowY: 'auto',
+              color: 'var(--text-primary)',
+            }}>{previews[preview]}</div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'space-between' }}>
+              <button onClick={() => setPreview(null)} style={ghostBtn()}>
+                {t.backToOptions}
+              </button>
+              <button onClick={() => copy(preview)} style={primaryBtn()}>
+                {copied ? '✓ ' + t.copied : t.copy}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SendOption({ icon, title, desc, onClick, disabled }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      display: 'flex', gap: 12, alignItems: 'flex-start',
+      padding: '12px 14px', textAlign: 'left',
+      background: disabled ? 'var(--bg-secondary)' : 'var(--bg-surface)',
+      border: '0.5px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-md)',
+      opacity: disabled ? 0.55 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+    }}>
+      <span style={{ fontSize: 20 }}>{icon}</span>
+      <span style={{ flex: 1 }}>
+        <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{desc}</div>
+      </span>
+    </button>
+  );
+}
+
+
+// In production these would come from a small server-side util,
+// but they're pure functions so they live happily in the frontend too.
+// ============================================================
+function buildLink(lessonId) {
+  return `${location.origin}${location.pathname}#/sub/${lessonId}`;
+}
+
+function formatLessonDate(lesson) {
+  // In production, use the real lesson date. For the mockup we hardcode "today".
+  const d = new Date();
+  const days = ['söndag','måndag','tisdag','onsdag','torsdag','fredag','lördag'];
+  const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+  return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}, ${lesson.time}`;
+}
+
+function buildEmailText(plan, lesson, lessonId, t, lang) {
+  const link = buildLink(lessonId);
+  const lines = [];
+  const isSv = lang === 'sv';
+
+  lines.push(`${t.emailGreeting},`);
+  lines.push('');
+  lines.push(isSv
+    ? 'Du har lektion idag:'
+    : 'You have a lesson today:');
+  lines.push(`📅 ${formatLessonDate(lesson)}`);
+  lines.push(`📍 ${lesson.class}, ${lesson.room}`);
+  lines.push(`📚 ${lesson.subject} — ${plan.title}`);
+  lines.push('');
+  lines.push(t.emailLabelPlan);
+  lines.push(`${t.emailLabelGoal}: ${plan.learningGoal}`);
+  lines.push('');
+  lines.push(`${t.emailLabelMaterials}: ${plan.materialsNeeded.join(', ')}`);
+  lines.push('');
+  plan.phases.forEach((p, i) => {
+    lines.push(`${i + 1}. ${p.title} (${p.durationMinutes} ${t.minutes})`);
+    lines.push(`   ${p.description}`);
+    lines.push('');
+  });
+  if (plan.exitExercise) {
+    lines.push(`${t.emailLabelExit} (${plan.exitExercise.durationMinutes} ${t.minutes})`);
+    lines.push(`${plan.exitExercise.title}: ${plan.exitExercise.description}`);
+    lines.push('');
+  }
+  if (plan.extraTime?.length) {
+    lines.push(t.emailLabelExtra);
+    plan.extraTime.forEach(et => {
+      lines.push(`• ${et.minutes} ${t.minutes}: ${et.title} — ${et.description}`);
+    });
+    lines.push('');
+  }
+  lines.push(`${t.emailLabelLink}: ${link}`);
+  lines.push(`${t.emailLabelQuestions} ${t.schoolReception}`);
+  lines.push('');
+  lines.push(`/ ${t.coordinatorName}`);
+  return lines.join('\n');
+}
+
+function buildSmsText(plan, lesson, lessonId, t, lang) {
+  const link = buildLink(lessonId);
+  const isSv = lang === 'sv';
+  return isSv
+    ? `Hej! Du har lektion imorgon:\n${lesson.class} ${lesson.subject} ${lesson.time} (${lesson.room}).\nLektionsplan: ${link}\n/ ${t.coordinatorName}`
+    : `Hi! You have a lesson tomorrow:\n${lesson.class} ${lesson.subject} ${lesson.time} (${lesson.room}).\nLesson plan: ${link}\n/ ${t.coordinatorName}`;
+}
+
+// Legacy helper kept for the "Copy" button in the modal — exports the plan as bare text.
 function plainText(plan) {
   const lines = [];
   lines.push(plan.title);
