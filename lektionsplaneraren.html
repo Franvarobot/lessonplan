@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Lektionsplaneraren</title>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
 <style>
   :root {
     --bg-page: #FAFAF8;
@@ -208,7 +208,7 @@ const LANG = {
 // API CALLERS
 // ============================================================
 async function callGemini({ apiKey, prompt, model }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.5-flash"}:generateContent?key=${apiKey}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -525,10 +525,11 @@ function SettingsModal({ config, onSave, onClose, t }) {
               </Field>
               <Field label={t.model}>
                 <Select value={draft.geminiModel} onChange={(e) => update("geminiModel", e.target.value)}>
-                  <option value="gemini-2.0-flash">gemini-2.0-flash (snabb, gratis)</option>
-                  <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
-                  <option value="gemini-1.5-pro">gemini-1.5-pro (kraftfullare)</option>
-                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (rekommenderad, snabb + gratis)</option>
+                  <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (snabbast, billigast)</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro (mest kapabel)</option>
+                  <option value="gemini-3.1-flash-preview">gemini-3.1-flash-preview (nyaste)</option>
+                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (nyaste, kraftfullast)</option>
                 </Select>
               </Field>
             </>
@@ -694,7 +695,7 @@ function App() {
   const [config, setConfig] = useState({
     provider: "gemini",
     geminiKey: "",
-    geminiModel: "gemini-2.0-flash",
+    geminiModel: "gemini-2.5-flash",
     anthropicKey: "",
     anthropicModel: "claude-sonnet-4-5-20250929",
     localUrl: "http://localhost:1234",
