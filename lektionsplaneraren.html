@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lektionsplaneraren</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root {
+    --bg-page: #FAFAF8;
+    --bg-surface: #FFFFFF;
+    --bg-secondary: #F5F4F0;
+    --bg-tertiary: #EFEDE7;
+    --text-primary: #1A1A1A;
+    --text-secondary: #5A5A55;
+    --text-tertiary: #8A8A85;
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --border-default: rgba(0, 0, 0, 0.15);
+    --border-strong: rgba(0, 0, 0, 0.25);
+    --accent: #2B5F8B;
+    --accent-hover: #1F4868;
+    --accent-bg: #EBF2F9;
+    --warning-bg: #FFF8E1;
+    --warning-border: #E8C547;
+    --warning-text: #6B5410;
+    --success-bg: #EAF5EE;
+    --success-text: #1F6B3D;
+    --danger-bg: #FBEBEB;
+    --danger-text: #8B2222;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text-primary); background: var(--bg-page); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  input, select, textarea { font: inherit; color: inherit; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  details summary { cursor: pointer; user-select: none; }
+  details summary::-webkit-details-marker { display: none; }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pulse { animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @media print { .no-print { display: none !important; } body { background: white; } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ============================================================
+// LGR22 / Gy22 — STAGES & SUBJECTS
+// ============================================================
+const STAGES = {
+  "Lågstadiet": ["Årskurs 1", "Årskurs 2", "Årskurs 3"],
+  "Mellanstadiet": ["Årskurs 4", "Årskurs 5", "Årskurs 6"],
+  "Högstadiet": ["Årskurs 7", "Årskurs 8", "Årskurs 9"],
+  "Gymnasiet": ["Gymnasiet år 1", "Gymnasiet år 2", "Gymnasiet år 3"],
+};
+
+const SUBJECTS_BY_STAGE = {
+  "Lågstadiet": ["Svenska", "Svenska som andraspråk", "Matematik", "Engelska", "NO (Naturorienterande ämnen)", "SO (Samhällsorienterande ämnen)", "Bild", "Musik", "Idrott och hälsa", "Slöjd", "Teknik"],
+  "Mellanstadiet": ["Svenska", "Svenska som andraspråk", "Matematik", "Engelska", "Biologi", "Fysik", "Kemi", "Geografi", "Historia", "Religionskunskap", "Samhällskunskap", "Bild", "Musik", "Idrott och hälsa", "Slöjd", "Teknik", "Hem- och konsumentkunskap", "Moderna språk"],
+  "Högstadiet": ["Svenska", "Svenska som andraspråk", "Matematik", "Engelska", "Moderna språk", "Biologi", "Fysik", "Kemi", "Geografi", "Historia", "Religionskunskap", "Samhällskunskap", "Bild", "Musik", "Idrott och hälsa", "Slöjd", "Teknik", "Hem- och konsumentkunskap"],
+  "Gymnasiet": ["Svenska 1", "Svenska 2", "Svenska 3", "Engelska 5", "Engelska 6", "Engelska 7", "Matematik 1a", "Matematik 1b", "Matematik 1c", "Matematik 2a", "Matematik 2b", "Matematik 2c", "Matematik 3b", "Matematik 3c", "Matematik 4", "Matematik 5", "Biologi 1", "Biologi 2", "Fysik 1", "Fysik 2", "Kemi 1", "Kemi 2", "Historia 1a1", "Historia 1b", "Historia 2a", "Religionskunskap 1", "Samhällskunskap 1a1", "Samhällskunskap 1b", "Naturkunskap 1a1", "Naturkunskap 1b", "Idrott och hälsa 1", "Filosofi 1", "Psykologi 1"],
+};
+
+const LANG = {
+  sv: {
+    title: "Lektionsplaneraren",
+    subtitle: "För LGR22 och Gy22",
+    apiSettings: "API-inställningar",
+    apiKeyMissing: "Lägg till en API-nyckel för att börja",
+    apiKeyMissingDesc: "Klicka på inställningar och välj Gemini, Anthropic eller en lokal modell. Nyckeln sparas endast i din webbläsare.",
+    openSettings: "Öppna inställningar",
+    lessonDetails: "Lektionsdetaljer",
+    stage: "Stadium",
+    grade: "Årskurs",
+    subject: "Ämne",
+    topic: "Tema eller område",
+    topicPlaceholder: "t.ex. Bråk och decimaltal, Andra världskriget, Fotosyntes…",
+    duration: "Lektionslängd",
+    chooseStage: "Välj stadium…",
+    chooseGrade: "Välj årskurs…",
+    chooseSubject: "Välj ämne…",
+    chooseStageFirst: "Välj stadium först",
+    generateChoices: "Generera lektionsförslag",
+    generating: "Genererar…",
+    chooseLesson: "Välj ett av lektionsförslagen",
+    chooseLessonDesc: "Varje förslag har en annan pedagogisk vinkel. Välj det som passar din klass.",
+    cancelChoices: "Avbryt",
+    yourLesson: "Din lektion",
+    addAnother: "Generera ett nytt förslag",
+    createSub: "Skapa vikarielektion",
+    creating: "Skapar…",
+    subDesc: "Bygger på lektionen ovan. Inga nya begrepp.",
+    reset: "Rensa",
+    print: "Skriv ut",
+    download: "Ladda ner",
+    approach: "Pedagogisk vinkel",
+    objective: "Lärandemål",
+    summary: "Sammanfattning",
+    lgr22: "Läroplanskoppling",
+    activities: "Lektionsmoment",
+    materials: "Material",
+    differentiation: "Anpassning",
+    assessment: "Bedömning",
+    subTip: "Tips till vikarien",
+    substituteLesson: "Vikarielektion",
+    chooseAccept: "Välj denna",
+    settings: "Inställningar",
+    provider: "Leverantör",
+    save: "Spara",
+    apiKey: "API-nyckel",
+    model: "Modell",
+    baseUrl: "Bas-URL",
+    keyHelp: "Nyckeln sparas i webbläsaren (localStorage).",
+    geminiHelp: "Hämta en gratis nyckel på aistudio.google.com",
+    anthropicHelp: "Hämta en nyckel på console.anthropic.com",
+    localHelp: "T.ex. LM Studio (http://localhost:1234) eller Ollama (http://localhost:11434)",
+    language: "Språk",
+    error: "Något gick fel",
+    close: "Stäng",
+    lessonsCount: "lektion",
+    lessonsCountPlural: "lektioner",
+    print_warning: "OBS: detta är en demo. Lektionsinnehållet genereras av AI och bör granskas av lärare innan användning.",
+  },
+  en: {
+    title: "Lesson Planner",
+    subtitle: "For LGR22 and Gy22",
+    apiSettings: "API settings",
+    apiKeyMissing: "Add an API key to get started",
+    apiKeyMissingDesc: "Click settings and choose Gemini, Anthropic, or a local model. The key is saved only in your browser.",
+    openSettings: "Open settings",
+    lessonDetails: "Lesson details",
+    stage: "Stage",
+    grade: "Grade",
+    subject: "Subject",
+    topic: "Topic or area",
+    topicPlaceholder: "e.g. Fractions, World War II, Photosynthesis…",
+    duration: "Lesson length",
+    chooseStage: "Choose stage…",
+    chooseGrade: "Choose grade…",
+    chooseSubject: "Choose subject…",
+    chooseStageFirst: "Choose stage first",
+    generateChoices: "Generate lesson options",
+    generating: "Generating…",
+    chooseLesson: "Pick one of the lesson options",
+    chooseLessonDesc: "Each option uses a different pedagogical angle. Pick what fits your class.",
+    cancelChoices: "Cancel",
+    yourLesson: "Your lesson",
+    addAnother: "Generate a different option",
+    createSub: "Create substitute lesson",
+    creating: "Creating…",
+    subDesc: "Builds on the lesson above. No new concepts.",
+    reset: "Clear",
+    print: "Print",
+    download: "Download",
+    approach: "Pedagogical angle",
+    objective: "Learning objective",
+    summary: "Summary",
+    lgr22: "Curriculum link",
+    activities: "Lesson activities",
+    materials: "Materials",
+    differentiation: "Differentiation",
+    assessment: "Assessment",
+    subTip: "Tip for the substitute",
+    substituteLesson: "Substitute lesson",
+    chooseAccept: "Choose this",
+    settings: "Settings",
+    provider: "Provider",
+    save: "Save",
+    apiKey: "API key",
+    model: "Model",
+    baseUrl: "Base URL",
+    keyHelp: "Key is saved in your browser (localStorage).",
+    geminiHelp: "Get a free key at aistudio.google.com",
+    anthropicHelp: "Get a key at console.anthropic.com",
+    localHelp: "e.g. LM Studio (http://localhost:1234) or Ollama (http://localhost:11434)",
+    language: "Language",
+    error: "Something went wrong",
+    close: "Close",
+    lessonsCount: "lesson",
+    lessonsCountPlural: "lessons",
+    print_warning: "NOTE: this is a demo. Lesson content is AI-generated and should be reviewed by a teacher before use.",
+  },
+};
+
+// ============================================================
+// API CALLERS
+// ============================================================
+async function callGemini({ apiKey, prompt, model }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-2.0-flash"}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.8, maxOutputTokens: 2048, responseMimeType: "application/json" },
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+async function callAnthropic({ apiKey, prompt, model }) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: model || "claude-sonnet-4-5-20250929",
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+async function callLocal({ baseUrl, apiKey, prompt, model }) {
+  const url = `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+    body: JSON.stringify({
+      model: model || "local-model",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.8,
+    }),
+  });
+  if (!res.ok) throw new Error(`Local ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || "";
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+async function runLLM(config, prompt) {
+  if (config.provider === "gemini") return callGemini({ apiKey: config.geminiKey, prompt, model: config.geminiModel });
+  if (config.provider === "anthropic") return callAnthropic({ apiKey: config.anthropicKey, prompt, model: config.anthropicModel });
+  if (config.provider === "local") return callLocal({ baseUrl: config.localUrl, apiKey: config.localKey, prompt, model: config.localModel });
+  throw new Error("No provider configured");
+}
+
+// ============================================================
+// PROMPTS
+// ============================================================
+function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, totalBranches, language }) {
+  const isGy = stage === "Gymnasiet";
+  const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
+  const langInstr = language === "sv" ? "Svara på svenska." : "Respond in English.";
+  return `Du är en svensk lärare som planerar lektioner enligt ${curriculum} från Skolverket.
+
+Kontext:
+- Stadium: ${stage}
+- Årskurs: ${grade}
+- Ämne: ${subject}
+- Tema/område: "${topic}"
+- Lektionslängd: ${duration} minuter
+
+Skapa lektionsförslag ${branchIndex + 1} av ${totalBranches}. Varje förslag ska ha en TYDLIGT annorlunda pedagogisk vinkel/ingång (laborativ, diskussionsbaserad, digital, projektbaserad, gestaltande, problembaserad, kollaborativ, etc) men alla ska vara kopplade till samma centrala innehåll och förmågor.
+
+${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
+{
+  "title": "kort lektionstitel (5-8 ord)",
+  "approach": "kort etikett för vinkeln, t.ex. 'Laborativ' eller 'Diskussion' eller 'Projekt'",
+  "summary": "en mening om vad eleverna gör",
+  "lgr22_connection": "konkret koppling till centralt innehåll och förmågor i ${curriculum}, 1-2 meningar",
+  "objective": "konkret lärandemål, en mening, mätbart",
+  "duration": "${duration} min",
+  "activities": ["4-6 lektionsmoment i ordning, varje punkt en kort fras med ungefärlig tid t.ex. '(10 min) Inledning…'"],
+  "materials": ["3-6 material/resurser som behövs"],
+  "differentiation": "en mening om hur lektionen kan anpassas (stöd och utmaning)",
+  "assessment": "hur läraren kontrollerar lärandet, en mening"
+}`;
+}
+
+function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language }) {
+  const isGy = stage === "Gymnasiet";
+  const curriculum = isGy ? "Gy22" : "LGR22";
+  const langInstr = language === "sv" ? "Svara på svenska." : "Respond in English.";
+  const baseContext = baseLesson
+    ? `Eleverna har just gått igenom denna lektion:\nTitel: ${baseLesson.title}\nLärandemål: ${baseLesson.objective}\nLektionsmoment: ${baseLesson.activities.join("; ")}`
+    : "";
+  return `Du är en svensk lärare som planerar en VIKARIELÄKTION enligt ${curriculum}.
+
+Kontext:
+- Stadium: ${stage}
+- Årskurs: ${grade}
+- Ämne: ${subject}
+- Tema/område: "${topic}"
+- Lektionslängd: ${duration} minuter
+${baseContext}
+
+Krav på vikarielektionen:
+- Inga NYA begrepp eller moment införs.
+- Bygger på det eleverna redan har lärt sig och konsoliderar/repeterar det.
+- Roligt och engagerande (lek, station, tävling, kreativt projekt, quiz, samarbete).
+- Lätt för en vikarie utan ämneskunskap att leda — tydliga steg, vanligt klassrumsmaterial.
+- Ändå pedagogiskt värdefullt — eleverna lär sig genom att tillämpa eller diskutera tidigare innehåll.
+
+${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
+{
+  "title": "rolig titel med en hook",
+  "approach": "Vikarielektion",
+  "summary": "en mening om aktiviteten",
+  "objective": "vilket tidigare lärande befästs, en mening",
+  "duration": "${duration} min",
+  "activities": ["5-7 steg-för-steg-instruktioner som en vikarie kan följa rakt av, varje med ungefärlig tid"],
+  "materials": ["3-6 enkla material som finns i klassrummet"],
+  "differentiation": "snabbtips för anpassning",
+  "assessment": "informell koll på lärandet, en mening",
+  "subTip": "ett praktiskt tips till vikarien (klassrumshantering, tidsplanering eller liknande)"
+}`;
+}
+
+// ============================================================
+// COMPONENTS
+// ============================================================
+const Icon = ({ name, size = 16, style = {} }) => {
+  const icons = {
+    settings: "M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z",
+    key: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
+    book: "M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z",
+    coffee: "M18 8h1a4 4 0 010 8h-1 M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z M6 1v3 M10 1v3 M14 1v3",
+    plus: "M12 5v14 M5 12h14",
+    x: "M18 6L6 18 M6 6l12 12",
+    refresh: "M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0114.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0020.49 15",
+    print: "M6 9V2h12v7 M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2 M6 14h12v8H6z",
+    download: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M7 10l5 5 5-5 M12 15V3",
+    chevronRight: "M9 18l6-6-6-6",
+    alert: "M12 9v4 M12 17h.01 M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
+    sparkles: "M12 3l1.9 5.8L20 10l-5.8 1.9L12 18l-1.9-6.1L4 10l6.1-1.2L12 3z M5 3v4 M3 5h4 M19 16v4 M17 18h4",
+    clock: "M12 22a10 10 0 100-20 10 10 0 000 20z M12 6v6l4 2",
+    check: "M20 6L9 17l-5-5",
+    target: "M12 22a10 10 0 100-20 10 10 0 000 20z M12 18a6 6 0 100-12 6 6 0 000 12z M12 14a2 2 0 100-4 2 2 0 000 4z",
+    file: "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
+    users: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75",
+    layers: "M12 2L2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5",
+  };
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+      {icons[name].split(" M").map((p, i) => <path key={i} d={i === 0 ? p : "M" + p} />)}
+    </svg>
+  );
+}
+
+function Button({ variant = "secondary", icon, children, onClick, disabled, type = "button", style = {} }) {
+  const variants = {
+    primary: { background: "var(--accent)", color: "#fff", border: "1px solid var(--accent)" },
+    primaryHover: { background: "var(--accent-hover)" },
+    secondary: { background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border-default)" },
+    secondaryHover: { background: "var(--bg-secondary)", borderColor: "var(--border-strong)" },
+    yellow: { background: "#F5C518", color: "#1A1A1A", border: "1px solid #C9A013" },
+    yellowHover: { background: "#E8B814" },
+    ghost: { background: "transparent", color: "var(--text-secondary)", border: "1px solid transparent" },
+    ghostHover: { background: "var(--bg-secondary)", color: "var(--text-primary)" },
+    danger: { background: "var(--bg-surface)", color: "var(--danger-text)", border: "1px solid var(--border-default)" },
+    dangerHover: { background: "var(--danger-bg)", borderColor: "var(--danger-text)" },
+  };
+  const [hover, setHover] = useState(false);
+  const base = variants[variant] || variants.secondary;
+  const hoverStyles = !disabled && hover ? variants[variant + "Hover"] || {} : {};
+  return (
+    <button type={type} onClick={onClick} disabled={disabled}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "8px 14px", fontSize: 13, fontWeight: 500,
+        borderRadius: "var(--radius-md)", transition: "all 0.12s",
+        whiteSpace: "nowrap",
+        ...base, ...hoverStyles, ...style,
+      }}>
+      {icon}
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, children, hint }) {
+  return (
+    <div>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
+      {children}
+      {hint && <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function Input(props) {
+  return <input {...props} style={{
+    width: "100%", padding: "8px 12px", fontSize: 14,
+    border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)",
+    background: "var(--bg-surface)", color: "var(--text-primary)",
+    transition: "border-color 0.12s", ...(props.style || {}),
+  }} />;
+}
+
+function Select({ children, ...props }) {
+  return (
+    <select {...props} style={{
+      width: "100%", padding: "8px 12px", fontSize: 14,
+      border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)",
+      background: "var(--bg-surface)", color: "var(--text-primary)",
+      appearance: "none",
+      backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%235A5A55\' stroke-width=\'2\'%3E%3Cpath d=\'M6 9l6 6 6-6\'/%3E%3C/svg%3E")',
+      backgroundRepeat: "no-repeat",
+      backgroundPosition: "right 10px center",
+      paddingRight: 32,
+      ...(props.style || {}),
+    }}>{children}</select>
+  );
+}
+
+// ============================================================
+// SETTINGS MODAL
+// ============================================================
+function SettingsModal({ config, onSave, onClose, t }) {
+  const [draft, setDraft] = useState(config);
+  const update = (k, v) => setDraft({ ...draft, [k]: v });
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "var(--radius-lg)", maxWidth: 540, width: "100%", maxHeight: "90vh", overflow: "auto", boxShadow: "var(--shadow-md)" }}>
+        <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="settings" size={18} />
+            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{t.settings}</h2>
+          </div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", padding: 6, color: "var(--text-secondary)", borderRadius: "var(--radius-sm)" }}>
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+          <Field label={t.language}>
+            <div style={{ display: "flex", gap: 0, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", overflow: "hidden", width: "fit-content" }}>
+              {[["sv", "Svenska"], ["en", "English"]].map(([code, label]) => (
+                <button key={code} onClick={() => update("language", code)} style={{
+                  padding: "8px 16px", fontSize: 13, fontWeight: 500, border: "none",
+                  background: draft.language === code ? "var(--accent)" : "var(--bg-surface)",
+                  color: draft.language === code ? "#fff" : "var(--text-primary)",
+                  cursor: "pointer", transition: "all 0.12s",
+                }}>{label}</button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={t.provider}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {[
+                { id: "gemini", label: "Google Gemini" },
+                { id: "anthropic", label: "Anthropic" },
+                { id: "local", label: "Lokal modell" },
+              ].map(p => (
+                <button key={p.id} onClick={() => update("provider", p.id)} style={{
+                  padding: "12px 10px", fontSize: 13, fontWeight: 500,
+                  border: `1px solid ${draft.provider === p.id ? "var(--accent)" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-md)",
+                  background: draft.provider === p.id ? "var(--accent-bg)" : "var(--bg-surface)",
+                  color: draft.provider === p.id ? "var(--accent)" : "var(--text-primary)",
+                  cursor: "pointer", transition: "all 0.12s",
+                }}>{p.label}</button>
+              ))}
+            </div>
+          </Field>
+
+          {draft.provider === "gemini" && (
+            <>
+              <Field label={t.apiKey} hint={t.geminiHelp}>
+                <Input type="password" value={draft.geminiKey} onChange={(e) => update("geminiKey", e.target.value)} placeholder="AIza..." />
+              </Field>
+              <Field label={t.model}>
+                <Select value={draft.geminiModel} onChange={(e) => update("geminiModel", e.target.value)}>
+                  <option value="gemini-2.0-flash">gemini-2.0-flash (snabb, gratis)</option>
+                  <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
+                  <option value="gemini-1.5-pro">gemini-1.5-pro (kraftfullare)</option>
+                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                </Select>
+              </Field>
+            </>
+          )}
+
+          {draft.provider === "anthropic" && (
+            <>
+              <Field label={t.apiKey} hint={t.anthropicHelp}>
+                <Input type="password" value={draft.anthropicKey} onChange={(e) => update("anthropicKey", e.target.value)} placeholder="sk-ant-..." />
+              </Field>
+              <Field label={t.model}>
+                <Select value={draft.anthropicModel} onChange={(e) => update("anthropicModel", e.target.value)}>
+                  <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
+                  <option value="claude-opus-4-5">claude-opus-4-5</option>
+                  <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+                </Select>
+              </Field>
+            </>
+          )}
+
+          {draft.provider === "local" && (
+            <>
+              <Field label={t.baseUrl} hint={t.localHelp}>
+                <Input value={draft.localUrl} onChange={(e) => update("localUrl", e.target.value)} placeholder="http://localhost:1234" />
+              </Field>
+              <Field label={t.model}>
+                <Input value={draft.localModel} onChange={(e) => update("localModel", e.target.value)} placeholder="local-model" />
+              </Field>
+              <Field label={`${t.apiKey} (valfritt)`}>
+                <Input type="password" value={draft.localKey} onChange={(e) => update("localKey", e.target.value)} placeholder="(lämna tomt om inte krävs)" />
+              </Field>
+            </>
+          )}
+
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-md)" }}>
+            🔒 {t.keyHelp}
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 24px", borderTop: "1px solid var(--border-subtle)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <Button variant="secondary" onClick={onClose}>{t.close}</Button>
+          <Button variant="primary" onClick={() => { onSave(draft); onClose(); }}>{t.save}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// LESSON CARD
+// ============================================================
+function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
+  return (
+    <div style={{
+      background: "var(--bg-surface)",
+      border: `1px solid ${lesson.isSub ? "#E8C547" : "var(--border-subtle)"}`,
+      borderLeft: `3px solid ${lesson.isSub ? "#E8C547" : "var(--accent)"}`,
+      borderRadius: "var(--radius-md)",
+      padding: "18px 22px",
+      position: "relative",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+            {isOption && optionLabel && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-bg)", padding: "2px 8px", borderRadius: "var(--radius-sm)", letterSpacing: "0.05em" }}>
+                {optionLabel}
+              </span>
+            )}
+            {lesson.isSub && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--warning-text)", background: "var(--warning-bg)", padding: "2px 8px", borderRadius: "var(--radius-sm)", letterSpacing: "0.05em" }}>
+                {t.substituteLesson}
+              </span>
+            )}
+            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {lesson.approach}
+            </span>
+          </div>
+          <h3 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{lesson.title}</h3>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>{lesson.summary}</p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+          <Icon name="clock" size={12} />
+          <span>{lesson.duration}</span>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gap: 14 }}>
+        <Section icon="target" label={t.objective}>
+          <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.objective}</p>
+        </Section>
+
+        {lesson.lgr22_connection && (
+          <Section icon="book" label={t.lgr22}>
+            <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>{lesson.lgr22_connection}</p>
+          </Section>
+        )}
+
+        <Section icon="layers" label={t.activities}>
+          <ol style={{ fontSize: 13, lineHeight: 1.6, paddingLeft: 18, color: "var(--text-primary)" }}>
+            {lesson.activities.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}
+          </ol>
+        </Section>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+          <Section icon="file" label={t.materials}>
+            <ul style={{ fontSize: 13, lineHeight: 1.6, listStyle: "none" }}>
+              {lesson.materials.map((m, i) => (
+                <li key={i} style={{ display: "flex", gap: 6 }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>·</span>
+                  <span>{m}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+
+          <Section icon="users" label={t.differentiation}>
+            <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.differentiation}</p>
+          </Section>
+        </div>
+
+        <Section icon="check" label={t.assessment}>
+          <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.assessment}</p>
+        </Section>
+
+        {lesson.subTip && (
+          <div style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", borderRadius: "var(--radius-md)", padding: "10px 14px" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warning-text)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+              💡 {t.subTip}
+            </div>
+            <p style={{ fontSize: 13, color: "var(--warning-text)", lineHeight: 1.5 }}>{lesson.subTip}</p>
+          </div>
+        )}
+      </div>
+
+      {isOption && (
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-subtle)", display: "flex", justifyContent: "flex-end" }}>
+          <Button variant="primary" icon={<Icon name="check" size={14} />} onClick={onPick}>{t.chooseAccept}</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section({ icon, label, children }) {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <Icon name={icon} size={13} style={{ color: "var(--text-tertiary)" }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+const STORAGE_KEY = "lektionsplaneraren-v1";
+
+function App() {
+  const [config, setConfig] = useState({
+    provider: "gemini",
+    geminiKey: "",
+    geminiModel: "gemini-2.0-flash",
+    anthropicKey: "",
+    anthropicModel: "claude-sonnet-4-5-20250929",
+    localUrl: "http://localhost:1234",
+    localKey: "",
+    localModel: "local-model",
+    language: "sv",
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [stage, setStage] = useState("");
+  const [grade, setGrade] = useState("");
+  const [subject, setSubject] = useState("");
+  const [topic, setTopic] = useState("");
+  const [duration, setDuration] = useState(60);
+  const [pending, setPending] = useState(null);
+  const [acceptedLesson, setAcceptedLesson] = useState(null);
+  const [subLesson, setSubLesson] = useState(null);
+  const [loadingChoices, setLoadingChoices] = useState(false);
+  const [loadingSub, setLoadingSub] = useState(false);
+  const [error, setError] = useState("");
+
+  const t = LANG[config.language] || LANG.sv;
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      if (saved && typeof saved === "object") setConfig((c) => ({ ...c, ...saved }));
+    } catch {}
+  }, []);
+
+  const saveConfig = (next) => {
+    setConfig(next);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
+
+  useEffect(() => { setGrade(""); setSubject(""); }, [stage]);
+
+  const hasKey = useMemo(() => {
+    if (config.provider === "gemini") return !!config.geminiKey;
+    if (config.provider === "anthropic") return !!config.anthropicKey;
+    if (config.provider === "local") return !!config.localUrl;
+    return false;
+  }, [config]);
+
+  const grades = stage ? STAGES[stage] : [];
+  const subjects = stage ? SUBJECTS_BY_STAGE[stage] : [];
+  const canGenerate = stage && grade && subject && topic.trim() && hasKey;
+
+  const generateChoices = async () => {
+    if (!canGenerate) return;
+    setError(""); setLoadingChoices(true); setPending(null); setAcceptedLesson(null); setSubLesson(null);
+    try {
+      const num = Math.floor(Math.random() * 4) + 2; // 2-5
+      const prompts = Array.from({ length: num }, (_, i) =>
+        lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: i, totalBranches: num, language: config.language })
+      );
+      const results = await Promise.all(prompts.map((p) => runLLM(config, p)));
+      setPending({ options: results.map((r, i) => ({ ...r, _id: `opt-${Date.now()}-${i}` })) });
+    } catch (e) {
+      setError(`${t.error}: ${e.message}`);
+      console.error(e);
+    } finally {
+      setLoadingChoices(false);
+    }
+  };
+
+  const acceptLesson = (opt) => {
+    setAcceptedLesson({ ...opt, id: opt._id, isSub: false });
+    setPending(null);
+    setSubLesson(null);
+  };
+
+  const generateSub = async () => {
+    if (!acceptedLesson || !hasKey) return;
+    setError(""); setLoadingSub(true);
+    try {
+      const result = await runLLM(config,
+        subPrompt({ stage, grade, subject, topic, duration, baseLesson: acceptedLesson, language: config.language })
+      );
+      setSubLesson({ ...result, id: `sub-${Date.now()}`, isSub: true });
+    } catch (e) {
+      setError(`${t.error}: ${e.message}`);
+    } finally {
+      setLoadingSub(false);
+    }
+  };
+
+  const reset = () => {
+    setPending(null);
+    setAcceptedLesson(null);
+    setSubLesson(null);
+    setError("");
+  };
+
+  const exportMd = () => {
+    const lessons = [acceptedLesson, subLesson].filter(Boolean);
+    const lines = [
+      `# Lektionsplanering`, ``,
+      `**Stadium:** ${stage}  `,
+      `**Årskurs:** ${grade}  `,
+      `**Ämne:** ${subject}  `,
+      `**Tema:** ${topic}  `,
+      `**Lektionslängd:** ${duration} min  `,
+      ``, `---`, ``,
+    ];
+    lessons.forEach((l) => {
+      lines.push(`## ${l.title}${l.isSub ? " 🟡 (Vikarielektion)" : ""}`);
+      lines.push(`*${l.approach} · ${l.duration}*`, ``);
+      if (l.lgr22_connection) lines.push(`**Läroplanskoppling:** ${l.lgr22_connection}`);
+      lines.push(`**Lärandemål:** ${l.objective}`);
+      lines.push(`**Sammanfattning:** ${l.summary}`, ``);
+      lines.push(`**Lektionsmoment:**`);
+      l.activities.forEach((a) => lines.push(`- ${a}`));
+      lines.push(``, `**Material:**`);
+      l.materials.forEach((m) => lines.push(`- ${m}`));
+      lines.push(``);
+      if (l.differentiation) lines.push(`**Anpassning:** ${l.differentiation}`);
+      lines.push(`**Bedömning:** ${l.assessment}`);
+      if (l.subTip) lines.push(`**Tips till vikarien:** ${l.subTip}`);
+      lines.push(``, `---`, ``);
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lektion-${subject}-${grade}.md`.replace(/\s+/g, "-").replace(/\//g, "-");
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh" }}>
+      {showSettings && <SettingsModal config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} t={t} />}
+
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "32px 20px 80px" }}>
+        {/* HEADER */}
+        <header className="no-print" style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 38, height: 38, background: "var(--accent)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+              <Icon name="book" size={20} />
+            </div>
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2 }}>{t.title}</h1>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>{t.subtitle}</p>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
+              <Icon name="key" size={12} />
+              <span>{config.provider === "gemini" ? "Gemini" : config.provider === "anthropic" ? "Anthropic" : "Lokal"}</span>
+              {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
+              {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
+            </div>
+            <Button variant="secondary" icon={<Icon name="settings" size={14} />} onClick={() => setShowSettings(true)}>
+              {t.apiSettings}
+            </Button>
+          </div>
+        </header>
+
+        {/* API KEY WARNING */}
+        {!hasKey && (
+          <div className="no-print" style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", borderRadius: "var(--radius-md)", padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ color: "var(--warning-text)", flexShrink: 0, marginTop: 2 }}>
+              <Icon name="alert" size={18} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warning-text)", marginBottom: 2 }}>{t.apiKeyMissing}</div>
+              <div style={{ fontSize: 12, color: "var(--warning-text)" }}>{t.apiKeyMissingDesc}</div>
+            </div>
+            <Button variant="primary" onClick={() => setShowSettings(true)}>{t.openSettings}</Button>
+          </div>
+        )}
+
+        {/* INPUT FORM */}
+        <div className="no-print" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: 24, marginBottom: 16 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="file" size={14} />
+            {t.lessonDetails}
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+            <Field label={t.stage}>
+              <Select value={stage} onChange={(e) => setStage(e.target.value)}>
+                <option value="">{t.chooseStage}</option>
+                {Object.keys(STAGES).map((s) => <option key={s} value={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label={t.grade}>
+              <Select value={grade} onChange={(e) => setGrade(e.target.value)} disabled={!stage}>
+                <option value="">{stage ? t.chooseGrade : t.chooseStageFirst}</option>
+                {grades.map((g) => <option key={g} value={g}>{g}</option>)}
+              </Select>
+            </Field>
+            <Field label={t.subject}>
+              <Select value={subject} onChange={(e) => setSubject(e.target.value)} disabled={!stage}>
+                <option value="">{stage ? t.chooseSubject : t.chooseStageFirst}</option>
+                {subjects.map((s) => <option key={s} value={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label={t.duration}>
+              <Select value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+                {[30, 40, 45, 60, 80, 90, 120].map((d) => <option key={d} value={d}>{d} min</option>)}
+              </Select>
+            </Field>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Field label={t.topic}>
+              <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={t.topicPlaceholder} />
+            </Field>
+          </div>
+
+          <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            {(acceptedLesson || pending) && (
+              <Button variant="secondary" icon={<Icon name="refresh" size={14} />} onClick={reset}>{t.reset}</Button>
+            )}
+            <Button variant="primary" icon={loadingChoices ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="sparkles" size={14} />}
+              onClick={generateChoices} disabled={!canGenerate || loadingChoices}>
+              {loadingChoices ? t.generating : t.generateChoices}
+            </Button>
+          </div>
+        </div>
+
+        {/* ERROR */}
+        {error && (
+          <div style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-text)", borderRadius: "var(--radius-md)", padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "var(--danger-text)", display: "flex", gap: 10 }}>
+            <Icon name="alert" size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* PENDING CHOICES */}
+        {pending && (
+          <div className="no-print" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>{t.chooseLesson}</h2>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t.chooseLessonDesc}</p>
+              </div>
+              <Button variant="ghost" icon={<Icon name="x" size={14} />} onClick={() => setPending(null)}>{t.cancelChoices}</Button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {pending.options.map((opt, idx) => (
+                <LessonCard key={opt._id} lesson={opt} t={t} isOption optionLabel={`Alternativ ${String.fromCharCode(65 + idx)}`} onPick={() => acceptLesson(opt)} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ACCEPTED LESSON */}
+        {acceptedLesson && (
+          <div style={{ marginBottom: 16 }}>
+            <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>{t.yourLesson}</h2>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={generateChoices}>{t.addAnother}</Button>
+                <Button variant="ghost" icon={<Icon name="print" size={13} />} onClick={() => window.print()}>{t.print}</Button>
+                <Button variant="ghost" icon={<Icon name="download" size={13} />} onClick={exportMd}>{t.download}</Button>
+              </div>
+            </div>
+            <LessonCard lesson={acceptedLesson} t={t} />
+
+            {!subLesson && (
+              <div className="no-print" style={{ marginTop: 14, padding: 16, background: "var(--bg-secondary)", border: "1px dashed var(--border-default)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 32, height: 32, background: "#FFF8E1", border: "1px solid #E8C547", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--warning-text)" }}>
+                    <Icon name="coffee" size={16} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{t.createSub}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.subDesc}</div>
+                  </div>
+                </div>
+                <Button variant="yellow" icon={loadingSub ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="coffee" size={14} />} onClick={generateSub} disabled={loadingSub}>
+                  {loadingSub ? t.creating : t.createSub}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUB LESSON */}
+        {subLesson && (
+          <div style={{ marginBottom: 16 }}>
+            <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="coffee" size={16} />
+                {t.substituteLesson}
+              </h2>
+              <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={generateSub} disabled={loadingSub}>
+                {loadingSub ? t.creating : t.addAnother}
+              </Button>
+            </div>
+            <LessonCard lesson={subLesson} t={t} />
+          </div>
+        )}
+
+        <div className="no-print" style={{ marginTop: 40, fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.6 }}>
+          {t.print_warning}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
