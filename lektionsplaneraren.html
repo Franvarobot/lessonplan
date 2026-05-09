@@ -117,6 +117,17 @@ const LANG = {
     lgr22: "Läroplanskoppling",
     activities: "Lektionsmoment",
     materials: "Material",
+    phases: "Lektionsförlopp",
+    teacherDoes: "Läraren / vikarien",
+    studentsDo: "Eleverna",
+    exitExerciseTitle: "Avslutningsövning",
+    extraActivitiesTitle: "Extra för snabba elever",
+    differentiationTitle: "Anpassning",
+    differentiationStod: "Stöd",
+    differentiationUtmaning: "Utmaning",
+    extraTimeTitle: "Om tid blir över",
+    extraTimeDesc: "Helklassaktiviteter som bygger på lektionen",
+    vikarieNotesTitle: "Tips till vikarien",
     differentiation: "Anpassning",
     assessment: "Bedömning",
     subTip: "Tips till vikarien",
@@ -180,6 +191,17 @@ const LANG = {
     lgr22: "Curriculum link",
     activities: "Lesson activities",
     materials: "Materials",
+    phases: "Lesson flow",
+    teacherDoes: "Teacher / substitute",
+    studentsDo: "Students",
+    exitExerciseTitle: "Exit exercise",
+    extraActivitiesTitle: "For early finishers",
+    differentiationTitle: "Differentiation",
+    differentiationStod: "Support",
+    differentiationUtmaning: "Challenge",
+    extraTimeTitle: "If time is left over",
+    extraTimeDesc: "Whole-class activities that build on the lesson",
+    vikarieNotesTitle: "Tips for the substitute",
     differentiation: "Differentiation",
     assessment: "Assessment",
     subTip: "Tip for the substitute",
@@ -253,7 +275,7 @@ async function callGemini({ apiKey, prompt, model }) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.8, maxOutputTokens: 8192, responseMimeType: "application/json" },
+      generationConfig: { temperature: 0.8, maxOutputTokens: 16384, responseMimeType: "application/json" },
     }),
   });
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
@@ -273,7 +295,7 @@ async function callAnthropic({ apiKey, prompt, model }) {
     },
     body: JSON.stringify({
       model: model || "claude-sonnet-4-5-20250929",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -340,69 +362,136 @@ ${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
 function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, totalBranches, language }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
-  const langInstr = language === "sv" ? "Svara på svenska." : "Respond in English.";
-  return `Du är en svensk lärare som planerar lektioner enligt ${curriculum} från Skolverket.
+  const langInstr = language === "sv"
+    ? "VIKTIGT: Skriv allt innehåll i JSON-objektet på svenska."
+    : "IMPORTANT: Write all content inside the JSON object in English.";
+  return `Du är en svensk lärare som planerar en KOMPLETT lektion enligt ${curriculum} från Skolverket.
 
-Kontext:
+Lektionsparametrar:
 - Stadium: ${stage}
 - Årskurs: ${grade}
 - Ämne: ${subject}
 - Tema/område: "${topic}"
-- Lektionslängd: ${duration} minuter
+- Lektionstid: ${duration} minuter
 
-Skapa lektionsförslag ${branchIndex + 1} av ${totalBranches}. Varje förslag ska ha en TYDLIGT annorlunda pedagogisk vinkel/ingång (laborativ, diskussionsbaserad, digital, projektbaserad, gestaltande, problembaserad, kollaborativ, etc) men alla ska vara kopplade till samma centrala innehåll och förmågor.
+Detta är förslag ${branchIndex + 1} av ${totalBranches}. Varje förslag ska ha en TYDLIGT annorlunda pedagogisk vinkel (laborativ, diskussionsbaserad, digital, projekt, gestaltande, problembaserad, kollaborativ).
 
-${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
+DETTA SKA VARA EN RIKTIG LEKTIONSPLAN — inte en disposition. En vikarie utan ämneskunskap måste kunna gå in i klassrummet med detta i handen och hålla en bra lektion. Det betyder:
+
+1. Varje fas i lektionen ska beskriva KONKRET vad läraren säger och gör (exempelfrågor, exempel-formuleringar, exempelsvar att lyssna efter), och vad eleverna gör.
+2. INGA vaga formuleringar som "diskutera ämnet" eller "introducera begreppet" — säg exakt vilka frågor som ställs, vilka exempel som ges, vilken aktivitet som genomförs, hur övergångar görs.
+3. Alla lektionens aktiviteter, exempel, frågor och övningar ska finnas inbakat i fas-beskrivningarna — inte som separata "TODO" till läraren.
+4. Differentiering, extra aktiviteter för elever som blir klara tidigt, och tids-tier-utökningar SKA ingå.
+
+${langInstr}
+
+Svara endast med ett giltigt JSON-objekt, ingen markdown, inga kommentarer:
 {
-  "title": "kort lektionstitel (5-8 ord)",
-  "approach": "kort etikett för vinkeln, t.ex. 'Laborativ' eller 'Diskussion' eller 'Projekt'",
-  "summary": "en mening om vad eleverna gör",
-  "lgr22_connection": "konkret koppling till centralt innehåll och förmågor i ${curriculum}, 1-2 meningar",
-  "objective": "konkret lärandemål, en mening, mätbart",
-  "duration": "${duration} min",
-  "activities": ["4-6 lektionsmoment i ordning, varje punkt en kort fras med ungefärlig tid t.ex. '(10 min) Inledning…'"],
-  "materials": ["3-6 material/resurser som behövs"],
-  "differentiation": "en mening om hur lektionen kan anpassas (stöd och utmaning)",
-  "assessment": "hur läraren kontrollerar lärandet, en mening"
+  "title": "konkret lektionstitel (5-10 ord)",
+  "approach": "kort etikett för pedagogisk vinkel, t.ex. 'Laborativ', 'Diskussion', 'Projekt'",
+  "summary": "2-3 meningar som beskriver lektionens upplägg och vad eleverna kommer göra",
+  "learningGoal": "konkret mätbart lärandemål (t.ex. 'Eleven kan förklara skillnaden mellan X och Y med egna exempel')",
+  "lgr22_connection": "konkret koppling till centralt innehåll och förmågor i ${curriculum}, 2-3 meningar",
+  "materialsNeeded": ["5-8 specifika material/resurser, var konkret (t.ex. 'whiteboard-pennor i 3 färger', inte bara 'whiteboard')"],
+  "phases": [
+    {
+      "name": "Fasens namn (t.ex. 'Inledning', 'Genomgång', 'Elevarbete', 'Sammanfattning')",
+      "minutes": antal_minuter_för_fasen,
+      "teacherDoes": ["3-6 konkreta steg som läraren utför, med EXAKTA frågor i citattecken där det är relevant. T.ex. 'Skriv ordet \\"fotosyntes\\" på tavlan och fråga: Vad tror ni det betyder? Lyssna efter elevsvar som nämner ljus, växter, syre.'"],
+      "studentsDo": ["2-4 konkreta beskrivningar av vad eleverna gör"]
+    }
+  ] (3-5 faser totalt; tiderna ska summera till ${duration} min),
+  "exitExercise": {
+    "title": "kort rolig avslutning",
+    "durationMinutes": 5,
+    "description": "konkret beskrivning av avslutningsaktiviteten — vad säger läraren, vad gör eleverna"
+  },
+  "extraActivities": [
+    {
+      "title": "för elever som blir klara tidigt",
+      "description": "konkret aktivitet som bygger på lektionens innehåll, kan göras självständigt"
+    }
+  ] (2-3 stycken),
+  "differentiation": {
+    "stod": ["3-4 konkreta sätt att stötta elever som behöver hjälp (t.ex. förenkla, dela upp, använd bild, sänk svårighetsgrad)"],
+    "utmaning": ["3-4 konkreta utmaningar för särbegåvade/snabba elever (fördjupning, abstraktion, tillämpning, högre kognitiv nivå)"]
+  },
+  "extraTime": [
+    { "minutes": 5, "title": "kort titel", "description": "konkret aktivitet", "linkBack": "en mening om hur detta knyter an till det lektionen just gick igenom" },
+    { "minutes": 10, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 15, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 20, "title": "...", "description": "...", "linkBack": "..." }
+  ] (EXAKT 4 tiers; varje tier är en helklassaktivitet om vikarien blir klar tidigt; varje tier MÅSTE bygga på det lektionen just gick igenom),
+  "vikarieNotes": ["3-5 praktiska tips till en eventuell vikarie: klassrumshantering, vanliga fallgropar, hur man vet att lektionen går bra, vad man ska säga om elever frågar svårt"],
+  "assessment": "hur läraren under lektionen kan se att eleverna lär sig det som var målet, en mening"
 }`;
 }
 
 function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22" : "LGR22";
-  const langInstr = language === "sv" ? "Svara på svenska." : "Respond in English.";
-  const baseContext = baseLesson
-    ? `Eleverna har just gått igenom denna lektion:\nTitel: ${baseLesson.title}\nLärandemål: ${baseLesson.objective}\nLektionsmoment: ${baseLesson.activities.join("; ")}`
-    : "";
+  const langInstr = language === "sv"
+    ? "VIKTIGT: Skriv allt på svenska."
+    : "IMPORTANT: Write everything in English.";
+  const baseContext = baseLesson ? `
+
+Eleverna har just gått igenom denna lektion (du måste bygga på exakt det innehållet):
+- Titel: ${baseLesson.title}
+- Lärandemål: ${baseLesson.learningGoal || baseLesson.objective || ""}
+- Vad de lärde sig: ${(baseLesson.phases || []).map(p => `${p.name}: ${(p.studentsDo || []).join(", ")}`).join(" | ") || (baseLesson.activities || []).join("; ")}` : "";
+
   return `Du är en svensk lärare som planerar en VIKARIELÄKTION enligt ${curriculum}.
 
 Kontext:
-- Stadium: ${stage}
-- Årskurs: ${grade}
-- Ämne: ${subject}
+- Stadium: ${stage}, Årskurs: ${grade}, Ämne: ${subject}
 - Tema/område: "${topic}"
-- Lektionslängd: ${duration} minuter
-${baseContext}
+- Lektionstid: ${duration} minuter${baseContext}
 
 Krav på vikarielektionen:
-- Inga NYA begrepp eller moment införs.
-- Bygger på det eleverna redan har lärt sig och konsoliderar/repeterar det.
+- INGA NYA begrepp eller moment införs.
+- Bygger på och repeterar/befäster det eleverna redan lärt sig.
 - Roligt och engagerande (lek, station, tävling, kreativt projekt, quiz, samarbete).
-- Lätt för en vikarie utan ämneskunskap att leda — tydliga steg, vanligt klassrumsmaterial.
-- Ändå pedagogiskt värdefullt — eleverna lär sig genom att tillämpa eller diskutera tidigare innehåll.
+- LÄTT för en vikarie utan ämneskunskap att leda — varje fas ska beskriva EXAKT vad vikarien säger och gör (med exempel-frågor i citattecken), och vad eleverna gör. Inga vaga formuleringar.
+- Vanligt klassrumsmaterial.
+- Pedagogiskt värdefullt — eleverna tillämpar och fördjupar tidigare innehåll.
 
-${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
+${langInstr}
+
+Svara endast med ett giltigt JSON-objekt, ingen markdown:
 {
   "title": "rolig titel med en hook",
   "approach": "Vikarielektion",
-  "summary": "en mening om aktiviteten",
-  "objective": "vilket tidigare lärande befästs, en mening",
-  "duration": "${duration} min",
-  "activities": ["5-7 steg-för-steg-instruktioner som en vikarie kan följa rakt av, varje med ungefärlig tid"],
-  "materials": ["3-6 enkla material som finns i klassrummet"],
-  "differentiation": "snabbtips för anpassning",
+  "summary": "2-3 meningar om aktivitetens upplägg",
+  "learningGoal": "vilket tidigare lärande som befästs, en mening",
+  "lgr22_connection": "kort koppling till ${curriculum} (1 mening)",
+  "materialsNeeded": ["3-6 enkla material som finns i klassrummet"],
+  "phases": [
+    {
+      "name": "Fasens namn",
+      "minutes": antal,
+      "teacherDoes": ["3-5 KONKRETA steg vikarien gör, med EXAKTA frågor i citattecken där det passar"],
+      "studentsDo": ["2-4 konkreta beskrivningar av vad eleverna gör"]
+    }
+  ] (3-4 faser, summa = ${duration} min),
+  "exitExercise": {
+    "title": "kort avslutning",
+    "durationMinutes": 5,
+    "description": "konkret beskrivning"
+  },
+  "extraActivities": [{ "title": "...", "description": "..." }] (1-2 stycken för elever som blir klara tidigt),
+  "differentiation": {
+    "stod": ["3 sätt att stötta"],
+    "utmaning": ["3 utmaningar för snabba elever"]
+  },
+  "extraTime": [
+    { "minutes": 5, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 10, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 15, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 20, "title": "...", "description": "...", "linkBack": "..." }
+  ],
+  "vikarieNotes": ["4-6 praktiska tips till vikarien: klassrumshantering, vanliga fallgropar, vad man säger om elever frågar svårt, hur man vet att det går bra"],
   "assessment": "informell koll på lärandet, en mening",
-  "subTip": "ett praktiskt tips till vikarien (klassrumshantering, tidsplanering eller liknande)"
+  "subTip": "ett centralt tips till vikarien"
 }`;
 }
 
@@ -621,6 +710,8 @@ function SettingsModal({ config, onSave, onClose, t }) {
 // LESSON CARD
 // ============================================================
 function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
+  // For options (preview cards) we show a compact summary; for the accepted lesson we show everything.
+  const compact = isOption;
   return (
     <div style={{
       background: "var(--bg-surface)",
@@ -630,6 +721,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
       padding: "18px 22px",
       position: "relative",
     }}>
+      {/* HEADER */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
@@ -648,35 +740,34 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
             </span>
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{lesson.title}</h3>
-          <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>{lesson.summary}</p>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{lesson.summary}</p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-          <Icon name="clock" size={12} />
-          <span>{lesson.duration}</span>
-        </div>
+        {lesson.phases && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+            <Icon name="clock" size={12} />
+            <span>{lesson.phases.reduce((s, p) => s + (p.minutes || 0), 0)} min</span>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ display: "grid", gap: 16 }}>
+        {/* Learning goal */}
         <Section icon="target" label={t.objective}>
-          <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.objective}</p>
+          <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.learningGoal || lesson.objective}</p>
         </Section>
 
+        {/* Curriculum link */}
         {lesson.lgr22_connection && (
           <Section icon="book" label={t.lgr22}>
             <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>{lesson.lgr22_connection}</p>
           </Section>
         )}
 
-        <Section icon="layers" label={t.activities}>
-          <ol style={{ fontSize: 13, lineHeight: 1.6, paddingLeft: 18, color: "var(--text-primary)" }}>
-            {lesson.activities.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}
-          </ol>
-        </Section>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+        {/* Materials */}
+        {(lesson.materialsNeeded || lesson.materials) && (
           <Section icon="file" label={t.materials}>
-            <ul style={{ fontSize: 13, lineHeight: 1.6, listStyle: "none" }}>
-              {lesson.materials.map((m, i) => (
+            <ul style={{ fontSize: 13, lineHeight: 1.7, listStyle: "none", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0 16px" }}>
+              {(lesson.materialsNeeded || lesson.materials || []).map((m, i) => (
                 <li key={i} style={{ display: "flex", gap: 6 }}>
                   <span style={{ color: "var(--text-tertiary)" }}>·</span>
                   <span>{m}</span>
@@ -684,16 +775,178 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
               ))}
             </ul>
           </Section>
+        )}
 
+        {/* PHASES — the meat of the lesson */}
+        {lesson.phases && lesson.phases.length > 0 && (
+          <Section icon="layers" label={t.phases}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 4 }}>
+              {lesson.phases.map((phase, i) => (
+                <div key={i} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "12px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-bg)", padding: "2px 7px", borderRadius: "var(--radius-sm)" }}>
+                        {i + 1}
+                      </span>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>{phase.name}</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 3 }}>
+                      <Icon name="clock" size={11} />
+                      {phase.minutes} min
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: 12, marginTop: 8 }}>
+                    {phase.teacherDoes && phase.teacherDoes.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                          {t.teacherDoes}
+                        </div>
+                        <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+                          {phase.teacherDoes.map((s, j) => (
+                            <li key={j} style={{ display: "flex", gap: 6 }}>
+                              <span style={{ color: "var(--accent)", flexShrink: 0 }}>→</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {phase.studentsDo && phase.studentsDo.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                          {t.studentsDo}
+                        </div>
+                        <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+                          {phase.studentsDo.map((s, j) => (
+                            <li key={j} style={{ display: "flex", gap: 6 }}>
+                              <span style={{ color: "var(--text-tertiary)", flexShrink: 0 }}>·</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Fallback: legacy activities array (shouldn't happen with new prompt but be safe) */}
+        {!lesson.phases && lesson.activities && (
+          <Section icon="layers" label={t.activities}>
+            <ol style={{ fontSize: 13, lineHeight: 1.6, paddingLeft: 18 }}>
+              {lesson.activities.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}
+            </ol>
+          </Section>
+        )}
+
+        {/* Exit exercise */}
+        {lesson.exitExercise && (
+          <div style={{ background: "#F0F7F2", border: "1px solid #C5DCC9", borderLeft: "3px solid var(--success-text)", borderRadius: "var(--radius-md)", padding: "12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                ✦ {t.exitExerciseTitle}
+              </div>
+              <span style={{ fontSize: 11, color: "var(--success-text)" }}>{lesson.exitExercise.durationMinutes} min</span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{lesson.exitExercise.title}</div>
+            <p style={{ fontSize: 13, lineHeight: 1.55, color: "var(--text-primary)" }}>{lesson.exitExercise.description}</p>
+          </div>
+        )}
+
+        {/* Differentiation */}
+        {lesson.differentiation && typeof lesson.differentiation === "object" && (lesson.differentiation.stod || lesson.differentiation.utmaning) && (
+          <Section icon="users" label={t.differentiationTitle}>
+            <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: 12 }}>
+              {lesson.differentiation.stod && (
+                <div style={{ background: "#F4F8FC", border: "1px solid #D0DEEC", borderRadius: "var(--radius-md)", padding: "10px 12px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", marginBottom: 5 }}>
+                    🤝 {t.differentiationStod}
+                  </div>
+                  <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {lesson.differentiation.stod.map((s, i) => <li key={i}>· {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {lesson.differentiation.utmaning && (
+                <div style={{ background: "#FAF6FC", border: "1px solid #DBC9E5", borderRadius: "var(--radius-md)", padding: "10px 12px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#6B3E8E", marginBottom: 5 }}>
+                    ⚡ {t.differentiationUtmaning}
+                  </div>
+                  <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {lesson.differentiation.utmaning.map((s, i) => <li key={i}>· {s}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </Section>
+        )}
+        {/* Legacy differentiation as a single string */}
+        {typeof lesson.differentiation === "string" && (
           <Section icon="users" label={t.differentiation}>
             <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.differentiation}</p>
           </Section>
-        </div>
+        )}
 
-        <Section icon="check" label={t.assessment}>
-          <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.assessment}</p>
-        </Section>
+        {/* Extra activities */}
+        {lesson.extraActivities && lesson.extraActivities.length > 0 && (
+          <Section icon="plus" label={t.extraActivitiesTitle}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {lesson.extraActivities.map((act, i) => (
+                <div key={i} style={{ borderLeft: "2px solid var(--border-default)", paddingLeft: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{act.title}</div>
+                  <p style={{ fontSize: 13, lineHeight: 1.55, color: "var(--text-secondary)" }}>{act.description}</p>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
 
+        {/* Extra time tiers */}
+        {lesson.extraTime && lesson.extraTime.length > 0 && (
+          <details style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "10px 14px" }}>
+            <summary style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", listStyle: "none" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>+ {t.extraTimeTitle}</div>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{t.extraTimeDesc}</div>
+              </div>
+              <Icon name="chevronRight" size={14} style={{ color: "var(--text-tertiary)" }} />
+            </summary>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginTop: 12 }}>
+              {lesson.extraTime.sort((a,b) => a.minutes - b.minutes).map((tier, i) => (
+                <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", padding: "10px 12px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", marginBottom: 4 }}>+{tier.minutes} min</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{tier.title}</div>
+                  <p style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 6 }}>{tier.description}</p>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", fontStyle: "italic", lineHeight: 1.4 }}>↳ {tier.linkBack}</p>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+
+        {/* Vikarie notes */}
+        {lesson.vikarieNotes && lesson.vikarieNotes.length > 0 && (
+          <div style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", borderRadius: "var(--radius-md)", padding: "12px 14px" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warning-text)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+              💡 {t.vikarieNotesTitle}
+            </div>
+            <ul style={{ fontSize: 13, lineHeight: 1.55, color: "var(--warning-text)", listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
+              {lesson.vikarieNotes.map((n, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span>·</span><span>{n}</span></li>)}
+            </ul>
+          </div>
+        )}
+
+        {/* Assessment */}
+        {lesson.assessment && (
+          <Section icon="check" label={t.assessment}>
+            <p style={{ fontSize: 13, lineHeight: 1.6 }}>{lesson.assessment}</p>
+          </Section>
+        )}
+
+        {/* Sub tip (legacy single tip field) */}
         {lesson.subTip && (
           <div style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", borderRadius: "var(--radius-md)", padding: "10px 14px" }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warning-text)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
@@ -865,18 +1118,81 @@ function App() {
     ];
     lessons.forEach((l) => {
       lines.push(`## ${l.title}${l.isSub ? " 🟡 (Vikarielektion)" : ""}`);
-      lines.push(`*${l.approach} · ${l.duration}*`, ``);
+      lines.push(`*${l.approach}*`, ``);
+      if (l.summary) lines.push(`${l.summary}`, ``);
+      if (l.learningGoal || l.objective) lines.push(`**Lärandemål:** ${l.learningGoal || l.objective}`);
       if (l.lgr22_connection) lines.push(`**Läroplanskoppling:** ${l.lgr22_connection}`);
-      lines.push(`**Lärandemål:** ${l.objective}`);
-      lines.push(`**Sammanfattning:** ${l.summary}`, ``);
-      lines.push(`**Lektionsmoment:**`);
-      l.activities.forEach((a) => lines.push(`- ${a}`));
-      lines.push(``, `**Material:**`);
-      l.materials.forEach((m) => lines.push(`- ${m}`));
       lines.push(``);
-      if (l.differentiation) lines.push(`**Anpassning:** ${l.differentiation}`);
-      lines.push(`**Bedömning:** ${l.assessment}`);
-      if (l.subTip) lines.push(`**Tips till vikarien:** ${l.subTip}`);
+
+      if (l.materialsNeeded || l.materials) {
+        lines.push(`### Material`);
+        (l.materialsNeeded || l.materials || []).forEach((m) => lines.push(`- ${m}`));
+        lines.push(``);
+      }
+
+      if (l.phases && l.phases.length) {
+        lines.push(`### Lektionsförlopp`);
+        l.phases.forEach((p, i) => {
+          lines.push(`#### ${i + 1}. ${p.name} (${p.minutes} min)`);
+          if (p.teacherDoes && p.teacherDoes.length) {
+            lines.push(`**Läraren / vikarien:**`);
+            p.teacherDoes.forEach((s) => lines.push(`- ${s}`));
+          }
+          if (p.studentsDo && p.studentsDo.length) {
+            lines.push(`**Eleverna:**`);
+            p.studentsDo.forEach((s) => lines.push(`- ${s}`));
+          }
+          lines.push(``);
+        });
+      } else if (l.activities) {
+        lines.push(`### Lektionsmoment`);
+        l.activities.forEach((a) => lines.push(`- ${a}`));
+        lines.push(``);
+      }
+
+      if (l.exitExercise) {
+        lines.push(`### Avslutningsövning (${l.exitExercise.durationMinutes} min)`);
+        lines.push(`**${l.exitExercise.title}**`);
+        lines.push(l.exitExercise.description, ``);
+      }
+
+      if (l.differentiation && typeof l.differentiation === "object") {
+        lines.push(`### Anpassning`);
+        if (l.differentiation.stod) {
+          lines.push(`**Stöd:**`);
+          l.differentiation.stod.forEach((s) => lines.push(`- ${s}`));
+        }
+        if (l.differentiation.utmaning) {
+          lines.push(`**Utmaning:**`);
+          l.differentiation.utmaning.forEach((s) => lines.push(`- ${s}`));
+        }
+        lines.push(``);
+      } else if (typeof l.differentiation === "string") {
+        lines.push(`**Anpassning:** ${l.differentiation}`, ``);
+      }
+
+      if (l.extraActivities && l.extraActivities.length) {
+        lines.push(`### Extra för snabba elever`);
+        l.extraActivities.forEach((a) => lines.push(`- **${a.title}** — ${a.description}`));
+        lines.push(``);
+      }
+
+      if (l.extraTime && l.extraTime.length) {
+        lines.push(`### Om tid blir över`);
+        l.extraTime.sort((a,b) => a.minutes - b.minutes).forEach((tier) => {
+          lines.push(`- **+${tier.minutes} min · ${tier.title}** — ${tier.description} (${tier.linkBack})`);
+        });
+        lines.push(``);
+      }
+
+      if (l.vikarieNotes && l.vikarieNotes.length) {
+        lines.push(`### Tips till vikarien`);
+        l.vikarieNotes.forEach((n) => lines.push(`- ${n}`));
+        lines.push(``);
+      }
+
+      if (l.assessment) lines.push(`**Bedömning:** ${l.assessment}`);
+      if (l.subTip) lines.push(`**Tips:** ${l.subTip}`);
       lines.push(``, `---`, ``);
     });
     const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
