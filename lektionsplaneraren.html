@@ -89,6 +89,10 @@ const LANG = {
     subject: "Ämne",
     topic: "Tema eller område",
     topicPlaceholder: "t.ex. Bråk och decimaltal, Andra världskriget, Fotosyntes…",
+    topicSuggestions: "Förslag",
+    suggestTopics: "Hämta förslag",
+    suggestingTopics: "Hämtar förslag…",
+    moreSuggestions: "Fler förslag",
     duration: "Lektionslängd",
     chooseStage: "Välj stadium…",
     chooseGrade: "Välj årskurs…",
@@ -148,6 +152,10 @@ const LANG = {
     subject: "Subject",
     topic: "Topic or area",
     topicPlaceholder: "e.g. Fractions, World War II, Photosynthesis…",
+    topicSuggestions: "Suggestions",
+    suggestTopics: "Get suggestions",
+    suggestingTopics: "Loading suggestions…",
+    moreSuggestions: "More suggestions",
     duration: "Lesson length",
     chooseStage: "Choose stage…",
     chooseGrade: "Choose grade…",
@@ -266,6 +274,30 @@ async function runLLM(config, prompt) {
 // ============================================================
 // PROMPTS
 // ============================================================
+function topicSuggestionsPrompt({ stage, grade, subject, language, exclude = [] }) {
+  const isGy = stage === "Gymnasiet";
+  const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
+  const langInstr = language === "sv" ? "Svara på svenska." : "Respond in English.";
+  const excludeText = exclude.length ? `\n\nUndvik dessa förslag (redan visade): ${exclude.join(", ")}` : "";
+  return `Du är en svensk lärare. Föreslå 8 lämpliga teman/områden för en lektion enligt ${curriculum}.
+
+Kontext:
+- Stadium: ${stage}
+- Årskurs: ${grade}
+- Ämne: ${subject}
+
+Förslagen ska:
+- Vara konkreta tema-/områdesnamn (inte hela kursplaner), 2-5 ord per förslag
+- Spegla centralt innehåll i ${curriculum} för denna årskurs och ämne
+- Variera i typ (t.ex. faktaområde, färdighet, projektidé, aktuellt tema)
+- Vara realistiska att undervisa på en eller några lektioner${excludeText}
+
+${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
+{
+  "topics": ["förslag 1", "förslag 2", "förslag 3", "förslag 4", "förslag 5", "förslag 6", "förslag 7", "förslag 8"]
+}`;
+}
+
 function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, totalBranches, language }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
@@ -681,6 +713,8 @@ function App() {
   const [subLesson, setSubLesson] = useState(null);
   const [loadingChoices, setLoadingChoices] = useState(false);
   const [loadingSub, setLoadingSub] = useState(false);
+  const [topicSuggestions, setTopicSuggestions] = useState([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
   const [error, setError] = useState("");
 
   const t = LANG[config.language] || LANG.sv;
@@ -697,7 +731,8 @@ function App() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
   };
 
-  useEffect(() => { setGrade(""); setSubject(""); }, [stage]);
+  useEffect(() => { setGrade(""); setSubject(""); setTopicSuggestions([]); }, [stage]);
+  useEffect(() => { setTopicSuggestions([]); }, [grade, subject]);
 
   const hasKey = useMemo(() => {
     if (config.provider === "gemini") return !!config.geminiKey;
@@ -709,6 +744,27 @@ function App() {
   const grades = stage ? STAGES[stage] : [];
   const subjects = stage ? SUBJECTS_BY_STAGE[stage] : [];
   const canGenerate = stage && grade && subject && topic.trim() && hasKey;
+
+  const canSuggestTopics = stage && grade && subject && hasKey;
+
+  const suggestTopics = async (append = false) => {
+    if (!canSuggestTopics) return;
+    setError(""); setLoadingTopics(true);
+    try {
+      const result = await runLLM(config,
+        topicSuggestionsPrompt({
+          stage, grade, subject, language: config.language,
+          exclude: append ? topicSuggestions : [],
+        })
+      );
+      const next = Array.isArray(result?.topics) ? result.topics : [];
+      setTopicSuggestions(append ? [...topicSuggestions, ...next] : next);
+    } catch (e) {
+      setError(`${t.error}: ${e.message}`);
+    } finally {
+      setLoadingTopics(false);
+    }
+  };
 
   const generateChoices = async () => {
     if (!canGenerate) return;
@@ -870,6 +926,57 @@ function App() {
             <Field label={t.topic}>
               <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={t.topicPlaceholder} />
             </Field>
+
+            {canSuggestTopics && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {t.topicSuggestions}
+                  </span>
+                  {topicSuggestions.length === 0 ? (
+                    <button onClick={() => suggestTopics(false)} disabled={loadingTopics} style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "5px 10px", fontSize: 12, fontWeight: 500,
+                      background: "transparent", color: "var(--accent)",
+                      border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)",
+                      cursor: loadingTopics ? "wait" : "pointer",
+                    }}>
+                      <Icon name={loadingTopics ? "refresh" : "sparkles"} size={12} style={loadingTopics ? { animation: "spin 0.8s linear infinite" } : {}} />
+                      {loadingTopics ? t.suggestingTopics : t.suggestTopics}
+                    </button>
+                  ) : (
+                    <button onClick={() => suggestTopics(true)} disabled={loadingTopics} style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "5px 10px", fontSize: 12, fontWeight: 500,
+                      background: "transparent", color: "var(--text-secondary)",
+                      border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)",
+                      cursor: loadingTopics ? "wait" : "pointer",
+                    }}>
+                      <Icon name={loadingTopics ? "refresh" : "plus"} size={12} style={loadingTopics ? { animation: "spin 0.8s linear infinite" } : {}} />
+                      {loadingTopics ? t.suggestingTopics : t.moreSuggestions}
+                    </button>
+                  )}
+                </div>
+
+                {topicSuggestions.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {topicSuggestions.map((s, i) => {
+                      const selected = topic === s;
+                      return (
+                        <button key={i} onClick={() => setTopic(s)} style={{
+                          padding: "6px 12px", fontSize: 12, fontWeight: 500,
+                          background: selected ? "var(--accent)" : "var(--bg-surface)",
+                          color: selected ? "#fff" : "var(--text-primary)",
+                          border: `1px solid ${selected ? "var(--accent)" : "var(--border-default)"}`,
+                          borderRadius: 999,
+                          cursor: "pointer", transition: "all 0.12s",
+                        }}>{s}</button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8 }}>
