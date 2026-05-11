@@ -62,7 +62,7 @@ const { useState, useEffect, useMemo, useRef } = React;
 // App version (shown in bottom-right corner)
 // Bump this when you ship changes. Patch = small fixes, minor = features.
 // ============================================================
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.3.0";
 
 // ============================================================
 // Lesson library — saved lessons in localStorage, auto-versioned
@@ -290,6 +290,54 @@ const LANG = {
     mdAssessment: "Bedömning",
     mdSubTip: "Tips",
     optionLabel: "Alternativ",
+    // Detail level
+    detailLevel: "Detaljnivå",
+    detailQuick: "Snabb",
+    detailQuickDesc: "~1 sida — mål, material, korta faser",
+    detailStandard: "Standard",
+    detailStandardDesc: "~2 sidor — script på nyckelfraser, differentiering",
+    detailFull: "Fullständig",
+    detailFullDesc: "3–5 sidor — allt inbäddat, för vikarier eller observation",
+    // Extras
+    extrasLabel: "Tillägg",
+    extrasHint: "Tillägg genereras när du öppnar respektive flik. Förvalda extras genereras automatiskt när du valt en lektion.",
+    extrasWorksheet: "Arbetsblad",
+    extrasWorksheetDesc: "Frågor + facit (utskrivbart)",
+    extrasAnchorChart: "Tavelplan",
+    extrasAnchorChartDesc: "Strukturerad tavelvy för hela lektionen",
+    extrasBadges: "Belöningsmärken",
+    extrasBadgesDesc: "Tryckbara märken som elever kan förtjäna",
+    extrasFlashcards: "Begreppskort",
+    extrasFlashcardsDesc: "Ord/begrepp med definitioner",
+    extrasDiscussionCards: "Diskussionskort",
+    extrasDiscussionCardsDesc: "Öppna frågor för grupparbete",
+    extrasDiagram: "Diagram",
+    extrasDiagramDesc: "Mermaid-diagram av process eller struktur",
+    extrasImageSearch: "Bildförslag",
+    extrasImageSearchDesc: "Kuraterade sökningar till fria bildkällor",
+    // Tab labels
+    tabPlan: "Lektionsplan",
+    tabWorksheet: "Arbetsblad",
+    tabAnchorChart: "Tavelplan",
+    tabBadges: "Märken",
+    tabFlashcards: "Begreppskort",
+    tabDiscussionCards: "Diskussionskort",
+    tabDiagram: "Diagram",
+    tabImageSearch: "Bilder",
+    extraGenerating: "Genererar…",
+    extraGenerate: "Generera",
+    extraRegenerate: "Generera om",
+    extraError: "Fel vid generering",
+    printWorksheet: "Skriv ut arbetsblad",
+    printWithAnswers: "Med facit",
+    printWithoutAnswers: "Utan facit",
+    printCards: "Skriv ut korten",
+    answerKey: "Facit",
+    keyTakeaway: "Det viktigaste eleverna tar med sig",
+    listenFor: "Lyssna efter",
+    cardFront: "Framsida",
+    cardBack: "Baksida",
+    cardExample: "Exempel",
   },
   en: {
     title: "Lesson Planner",
@@ -414,6 +462,54 @@ const LANG = {
     mdAssessment: "Assessment",
     mdSubTip: "Tip",
     optionLabel: "Option",
+    // Detail level
+    detailLevel: "Detail level",
+    detailQuick: "Quick",
+    detailQuickDesc: "~1 page — goal, materials, brief phases",
+    detailStandard: "Standard",
+    detailStandardDesc: "~2 pages — script on key moments, differentiation",
+    detailFull: "Full",
+    detailFullDesc: "3–5 pages — everything embedded, for subs or observation",
+    // Extras
+    extrasLabel: "Extras",
+    extrasHint: "Extras are generated when you open their tab. Default extras generate automatically when you accept a lesson.",
+    extrasWorksheet: "Worksheet",
+    extrasWorksheetDesc: "Questions + answer key (printable)",
+    extrasAnchorChart: "Anchor chart",
+    extrasAnchorChartDesc: "Structured board view for the whole lesson",
+    extrasBadges: "Reward badges",
+    extrasBadgesDesc: "Printable badges students can earn",
+    extrasFlashcards: "Flashcards",
+    extrasFlashcardsDesc: "Vocabulary/concepts with definitions",
+    extrasDiscussionCards: "Discussion cards",
+    extrasDiscussionCardsDesc: "Open questions for group work",
+    extrasDiagram: "Diagram",
+    extrasDiagramDesc: "Mermaid diagram of a process or structure",
+    extrasImageSearch: "Image search",
+    extrasImageSearchDesc: "Curated searches to free image sources",
+    // Tab labels
+    tabPlan: "Lesson plan",
+    tabWorksheet: "Worksheet",
+    tabAnchorChart: "Anchor chart",
+    tabBadges: "Badges",
+    tabFlashcards: "Flashcards",
+    tabDiscussionCards: "Discussion cards",
+    tabDiagram: "Diagram",
+    tabImageSearch: "Images",
+    extraGenerating: "Generating…",
+    extraGenerate: "Generate",
+    extraRegenerate: "Regenerate",
+    extraError: "Generation failed",
+    printWorksheet: "Print worksheet",
+    printWithAnswers: "With answers",
+    printWithoutAnswers: "Without answers",
+    printCards: "Print cards",
+    answerKey: "Answer key",
+    keyTakeaway: "Key takeaway",
+    listenFor: "Listen for",
+    cardFront: "Front",
+    cardBack: "Back",
+    cardExample: "Example",
   },
 };
 
@@ -582,12 +678,46 @@ ${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
 }`;
 }
 
-function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, totalBranches, language }) {
+function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, totalBranches, language, detailLevel = "standard" }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
   const langInstr = language === "sv"
     ? "VIKTIGT: Skriv allt innehåll i JSON-objektet på svenska."
     : "IMPORTANT: Write all content inside the JSON object in English.";
+
+  // Detail-level instructions affect which fields are populated and how verbose each phase is.
+  const detailInstr = {
+    quick: `DETALJNIVÅ: SNABB (en sida).
+- 3-4 faser, varje phase.teacherDoes har MAX 2 punkter, INGEN teacherScript, INGEN anticipatedResponses.
+- INGEN extraTime, INGEN extraActivities, INGEN commonPitfalls, INGEN classroomManagement, INGEN homework.
+- successCriteria max 2 punkter. teacherNotes max 2 punkter.
+- differentiation.stod och differentiation.utmaning: 1-2 punkter vardera.
+- boardLayout: kort men VERBATIM (inte bara "agenda + begrepp").
+- Skriv som om läraren själv ska använda planen — koncist, inga upprepningar.`,
+    standard: `DETALJNIVÅ: STANDARD (2 sidor).
+- 4-5 faser. teacherScript bara för INTRODUKTIONEN och AVSLUTNINGEN (inte varje fas).
+- anticipatedResponses bara där det verkligen behövs (kontroversiella eller fel-prone moment).
+- extraTime: 2 nivåer (5 och 15 min), inte 4.
+- extraActivities: 2 stycken.
+- commonPitfalls: 2-3 punkter.
+- Hoppa över classroomManagement helt.
+- successCriteria 3 punkter, teacherNotes 2-3 punkter.`,
+    full: `DETALJNIVÅ: FULL (3-5 sidor — komplett dokumentation).
+- 3-6 faser, alla med teacherScript och anticipatedResponses.
+- extraTime: alla 4 nivåer (5, 10, 15, 20 min).
+- extraActivities: 2-3 stycken.
+- commonPitfalls: 3-5 punkter.
+- successCriteria: 3-4 punkter. teacherNotes: 3-5 punkter.
+- Inkludera classroomManagement (3-5 punkter) och homework.`,
+  }[detailLevel] || "";
+
+  // Quick mode skips several heavy fields; standard skips some; full includes everything.
+  const optionalFieldsHint = detailLevel === "quick"
+    ? `\nVIKTIGT: Lämna BORT helt (inte med tomma arrayer): extraTime, extraActivities, commonPitfalls, classroomManagement, homework, anticipatedResponses, teacherScript.`
+    : detailLevel === "standard"
+      ? `\nVIKTIGT: Lämna BORT classroomManagement helt. anticipatedResponses och teacherScript inkluderas bara där detaljnivåinstruktionen anger.`
+      : "";
+
   return `Du är en svensk förstelärare som planerar en RIKTIG lektion enligt ${curriculum} från Skolverket. Din planering ska följa beprövad pedagogisk forskning (Rosenshine, Hattie, Skolverkets "Strukturerad Undervisning"-modell) och vara så konkret att en lärare kan gå rakt in i klassrummet med planen i handen och hålla en bra lektion.
 
 LEKTIONSPARAMETRAR:
@@ -596,6 +726,8 @@ LEKTIONSPARAMETRAR:
 - Ämne: ${subject}
 - Tema/område: "${topic}"
 - Lektionstid: ${duration} minuter
+
+${detailInstr}${optionalFieldsHint}
 
 Detta är förslag ${branchIndex + 1} av ${totalBranches}. Varje förslag ska ha en TYDLIGT annorlunda pedagogisk vinkel — välj en av dessa modeller och säg vilken i fältet "approach":
 1. STRUKTURERAD UNDERVISNING (Direct Instruction) — Skolverkets sex-stegsmodell. Standard för faktakunskap, färdighetsträning, matematik, språkregler. Faserna är: "Inledning", "Genomgång", "Stödd övning", "Sammanfattning och kontroll", "Enskild övning", "Avslutning".
@@ -613,6 +745,21 @@ GRUNDREGLER FÖR EN VERKLIG LEKTIONSPLAN:
 - Eleverna ska få cirka 80% rätt på övningar med stöd (inte för lätt, inte för svårt).
 - Tiderna i alla faser MÅSTE summera till ${duration} min.
 
+🚫 ABSOLUT FÖRBJUDET — FANTOMREFERENSER 🚫
+Du får ALDRIG referera till något som inte är förberett i planen eller som inte explicit skapas i en tidigare fas. Detta är den vanligaste bristen i AI-genererade lektionsplaner och förstör hela planen.
+
+Exempel på fantomreferenser som FÖRSTÖR planen:
+- "Peka på Adjektivbanken på tavlan" — vad är Adjektivbanken? Vad står där? När skrevs den upp?
+- "Använd ordlistan från förra veckan" — vilken ordlista? Vilka ord?
+- "Eleverna tittar på bilden" — vilken bild? Var kommer den ifrån?
+- "Hänvisa till regeln vi gick igenom" — vilken regel? Citera den.
+
+REGEL: Om planen nämner ETT objekt (en lista, en text, en bild, en ordlista, en formel, en regel, ett exempel, en "bank", en "anslagstavla") måste EN av följande gälla:
+(a) Innehållet är skrivet ordagrant i planen (i "boardSetup" eller "teacherScript" eller motsvarande fält), ELLER
+(b) En tidigare fas innehåller EXPLICITA steg för att skapa det, MED INNEHÅLLET (t.ex. "Skriv följande 8 adjektiv på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd.").
+
+INNAN du skriver phases, fundera: "Vilket konkret material/innehåll behöver läraren ha redo på tavlan eller i handen?" — och PRODUCERA det innehållet i fältet "boardSetup" eller i den första fasens teacherDoes/teacherScript.
+
 ${langInstr}
 
 Svara endast med ett giltigt JSON-objekt, ingen markdown:
@@ -625,7 +772,7 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
   "priorKnowledge": "vad eleverna förväntas redan kunna för att lektionen ska fungera (1-2 meningar)",
   "lgr22_connection": "konkret koppling till centralt innehåll OCH en eller flera förmågor i ${curriculum}, citera relevanta nyckelord (2-3 meningar)",
   "successCriteria": ["3-4 konkreta tecken som läraren ser/hör om eleven har nått målet (t.ex. 'Eleven använder begreppet X i ett eget exempel utan att läraren påminner')"],
-  "boardLayout": "kort beskrivning av vad läraren skriver upp på tavlan i början av lektionen (Skolverkets rekommendation: en agenda med 4-5 punkter samt centrala begrepp)",
+  "boardLayout": "VERBATIM innehåll som läraren skriver på tavlan i början av lektionen. Skriv ut hela texten — agenda (4-5 punkter), centrala begrepp med definitioner, eventuella exempel som behövs senare. Detta ska kunna kopieras rakt av till tavlan. Använd radbrytningar (\\n) om det behövs. INGA platshållare som '[lärarens egna ord]'.",
   "materialsNeeded": ["5-8 specifika material — var konkret med antal/typ (t.ex. 'tärningar, 2 per elevpar', inte bara 'tärningar')"],
   "phases": [
     {
@@ -695,6 +842,21 @@ ABSOLUTA KRAV:
 6. Roligt och engagerande (lek, station, tävling, kreativt projekt, quiz, samarbete) men pedagogiskt värdefullt.
 7. Bara material som rimligen finns i klassrummet (papper, pennor, tavla, ev. surfplattor).
 
+🚫 ABSOLUT FÖRBJUDET — FANTOMREFERENSER 🚫
+EXTRA viktigt för en vikarie utan ämneskunskap. Du får ALDRIG referera till något som inte finns konkret i planen.
+
+FÖRBJUDNA formuleringar (och vad du ska skriva istället):
+- ❌ "Peka på Adjektivbanken på tavlan"
+  ✅ Lägg en första fas "Förberedelse" där vikarien skriver: "Innan eleverna kommer in: Skriv följande på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd."
+- ❌ "Hänvisa till texten ni läste förra gången"
+  ✅ "Den text eleverna läste förra lektionen handlade om X. Påminn dem genom att säga: '...'. Texten finns inte här — om eleverna behöver återblicka, säg: '...'."
+- ❌ "Eleverna gör övning 3 i boken"
+  ✅ Skriv ut hela övningen ordagrant i embeddedContent.problems med facit.
+- ❌ "Använd bilden ni jobbat med"
+  ✅ Beskriv bilden i ord eller skriv "Vikarien har INGEN bild — använd istället denna beskrivning: '...'."
+
+REGEL: Innan du skriver phases, lista alla föremål/innehåll som vikarien kommer att referera till. För VARJE sådant: antingen lägg in en "Förberedelse"-fas (med innehållet skrivet ordagrant), eller embedda innehållet i embeddedContent. Om vikarien inte kan utföra ett steg utan att förstå ämnet — då har du misslyckats.
+
 ${langInstr}
 
 Svara endast med ett giltigt JSON-objekt, ingen markdown:
@@ -706,7 +868,7 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
   "priorKnowledge": "vad eleverna förväntas redan kunna (1 mening)",
   "lgr22_connection": "kort koppling till ${curriculum} (1-2 meningar)",
   "successCriteria": ["3 konkreta tecken på att lektionen lyckas"],
-  "boardLayout": "exakt vad vikarien skriver på tavlan i början (agenda + ev. nyckelbegrepp)",
+  "boardLayout": "VERBATIM text som vikarien skriver på tavlan INNAN eleverna kommer in. Skriv ut allt: lektionens titel, agenda, eventuella ord-listor / nyckelbegrepp / exempel som senare faser refererar till. Använd \\n för radbrytningar. Detta är vad vikarien faktiskt kommer att kopiera till tavlan — så det ska inte innehålla några platshållare.",
   "materialsNeeded": ["3-6 enkla material — ange antal (t.ex. 'A4-papper, 1 per elev')"],
   "preparedContent": {
     "description": "Beskriv vilket material som ligger inbäddat i planen för vikarien",
@@ -763,6 +925,180 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
 }
 
 // ============================================================
+// EXTRAS PROMPTS — each one is a focused, one-shot LLM call
+// triggered when the user opens a tab. The base lesson context is
+// passed in so the extra is grounded in the actual plan.
+// ============================================================
+function extrasContextBlock(lesson, language) {
+  const isSv = language === "sv";
+  const lines = [];
+  lines.push(isSv ? "LEKTIONSKONTEXT:" : "LESSON CONTEXT:");
+  lines.push(`- ${isSv ? "Titel" : "Title"}: ${lesson.title}`);
+  if (lesson.learningGoal) lines.push(`- ${isSv ? "Lärandemål" : "Learning goal"}: ${lesson.learningGoal}`);
+  if (lesson.summary) lines.push(`- ${isSv ? "Sammanfattning" : "Summary"}: ${lesson.summary}`);
+  if (lesson.phases?.length) {
+    lines.push(`- ${isSv ? "Faser" : "Phases"}: ${lesson.phases.map(p => `${p.name} (${p.minutes}min)`).join(" | ")}`);
+  }
+  return lines.join("\n");
+}
+
+function extrasPrompt({ kind, lesson, stage, grade, subject, topic, duration, language }) {
+  const isSv = language === "sv";
+  const langInstr = isSv ? "Svara på svenska." : "Respond in English.";
+  const ctx = extrasContextBlock(lesson, language);
+  const meta = `${stage} · ${isSv ? "Årskurs" : "Grade"} ${grade} · ${subject} · "${topic}" · ${duration} min`;
+  const youngerLearner = (typeof grade === "number" && grade <= 6) || /^F-|^åk ?[1-6]/i.test(String(grade));
+
+  const builders = {
+    worksheet: () => `Du genererar ett ARBETSBLAD för eleverna baserat på lektionen nedan.
+
+${meta}
+${ctx}
+
+KRAV:
+- 5-10 uppgifter som befäster lektionens lärandemål. Anpassade till årskurs ${grade}.
+- Varje uppgift har konkret frågetext (inga platshållare).
+- Inkludera FACIT separat — kort förklaring där det behövs.
+- Variera typer: numrerade frågor, lucktext, kort uppgift att lösa, kort öppen fråga.
+- INGA fantomreferenser. Allt innehåll måste vara skrivet ordagrant i uppgiftstexterna.
+
+${langInstr} Svara endast med giltigt JSON, ingen markdown:
+{
+  "title": "arbetsbladets titel",
+  "instructions": "kort instruktion till eleven (1-2 meningar)",
+  "exercises": [
+    { "n": 1, "type": "open|fill|multiple|short|calc", "question": "fullständig frågetext", "answer": "fullständigt facit", "explanation": "kort förklaring om relevant" }
+  ],
+  "answerKeyNote": "kort kommentar till läraren om hur facit används (1 mening)"
+}`,
+
+    badges: () => `Du genererar 3-5 belöningsmärken (badges) för denna lektion. ${youngerLearner ? "Eleverna är yngre — använd lekfullt språk, roliga namn, känslor." : "Eleverna är äldre — håll det subtilt, inte barnsligt. Tänk 'expert', 'utforskare', 'analytiker' snarare än 'super-stjärna'."}
+
+${meta}
+${ctx}
+
+KRAV:
+- Varje märke kopplas till ett konkret beteende eller framsteg under lektionen.
+- Märket har en kort titel (1-3 ord), en kort beskrivning av kriteriet, och en emoji som ikon.
+- Välj färger som passar märket (hex-koder).
+
+${langInstr} Svara endast med giltigt JSON:
+{
+  "badges": [
+    { "title": "kort titel", "criterion": "vad eleven gjorde för att förtjäna det (en mening)", "emoji": "🌟", "color": "#hexkod", "textColor": "#hexkod" }
+  ]
+}`,
+
+    flashcards: () => `Du genererar en uppsättning ord-/begreppskort (flashcards) baserade på lektionen.
+
+${meta}
+${ctx}
+
+KRAV:
+- 8-12 kort med nyckelbegrepp/ord från lektionen.
+- Framsidan: ordet eller begreppet. Baksidan: kort definition på elevernas nivå (årskurs ${grade}).
+- Vid relevans: en kort exempelfras som visar användningen.
+- INGA begrepp som inte introduceras i lektionen.
+
+${langInstr} Svara endast med giltigt JSON:
+{
+  "title": "korten-uppsättningens titel",
+  "cards": [
+    { "front": "ord eller begrepp", "back": "kort definition (max 20 ord)", "example": "exempelfras (valfritt)" }
+  ]
+}`,
+
+    discussionCards: () => `Du genererar diskussionsfrågor som klippkort för grupparbete.
+
+${meta}
+${ctx}
+
+KRAV:
+- 6-10 öppna frågor som driver djupare diskussion kring lektionens innehåll.
+- Inga ja/nej-frågor. Använd "Varför...", "Hur skulle ni...", "Vad händer om...", "Jämför...".
+- Varje fråga har en kort "lyssna efter"-rad till läraren — vad ett bra svar innehåller.
+- Anpassade till årskurs ${grade}.
+
+${langInstr} Svara endast med giltigt JSON:
+{
+  "title": "korten-uppsättningens titel",
+  "instructions": "instruktion till gruppen (1-2 meningar)",
+  "cards": [
+    { "n": 1, "question": "fullständig öppen fråga", "listenFor": "vad ett bra svar innehåller (en mening till läraren)" }
+  ]
+}`,
+
+    anchorChart: () => `Du genererar en TAVELPLAN (anchor chart) — exakt vad läraren ritar/skriver på tavlan som referens under hela lektionen.
+
+${meta}
+${ctx}
+
+KRAV:
+- Klar layout med en huvudrubrik och 3-5 sektioner.
+- Varje sektion har en tydlig underrubrik och 2-5 konkreta punkter eller exempel — INGA platshållare.
+- Om relevant: enkla streckfigurer eller diagram beskrivna i ord (t.ex. "Rita en pil från X till Y").
+- Innehållet ska kunna kopieras rakt av till en tavla eller skrivas ut som A3.
+
+${langInstr} Svara endast med giltigt JSON:
+{
+  "title": "tavelplanens huvudrubrik",
+  "subtitle": "kort underrubrik (1 mening)",
+  "sections": [
+    { "heading": "underrubrik", "items": ["punkt 1", "punkt 2", "punkt 3"], "visualHint": "valfri instruktion om en skiss/symbol att rita" }
+  ],
+  "keyTakeaway": "den ENA meningen läraren vill att eleverna minns när de lämnar lektionen"
+}`,
+
+    diagram: () => `Du genererar ett MERMAID-DIAGRAM som visualiserar en central process eller struktur från lektionen.
+
+${meta}
+${ctx}
+
+KRAV:
+- Välj rätt diagramtyp: flowchart för processer, timeline för tidsförlopp, mindmap för begreppskartor, sequenceDiagram för dialog/händelser, classDiagram för hierarkier.
+- Diagrammet ska vara LÄSBART när det skrivs ut — inga onödiga noder, ren struktur.
+- Innehållet är konkret från lektionen, inte abstrakt.
+- Endast Mermaid-syntax i fältet "code". INGA \`\`\` -staket.
+
+${langInstr} Svara endast med giltigt JSON:
+{
+  "type": "flowchart|timeline|mindmap|sequenceDiagram|classDiagram",
+  "title": "diagrammets titel",
+  "description": "vad diagrammet visar (1-2 meningar)",
+  "code": "ren mermaid-syntax utan code-fence",
+  "useCase": "när i lektionen läraren visar diagrammet"
+}`,
+
+    imageSearch: () => `Du föreslår BILDSÖKNINGAR för varje fas av lektionen — kuraterade länkar till fria bildkällor.
+
+${meta}
+${ctx}
+
+KRAV:
+- Per fas: 2-3 specifika sökfrågor (på ${isSv ? "engelska för bättre resultat" : "English"}) som hittar relevanta, fria bilder.
+- Föreslå rätt källa per fråga: Pixabay, Unsplash, Wikipedia Commons för fakta, ${isSv ? "SO-rummet eller NRM för svensk kontext" : "national archives or museums for cultural content"}.
+- Kort förklaring varför bilden hjälper i just den fasen.
+- INGA AI-genererade bilder. Endast riktiga sökstrategier.
+
+${langInstr} Svara endast med giltigt JSON:
+{
+  "phaseSearches": [
+    {
+      "phaseName": "fasens namn från lektionen",
+      "searches": [
+        { "query": "engelska sökord", "source": "pixabay|unsplash|commons|other", "url": "https://... direkt sök-URL", "why": "varför bilden hjälper (1 mening)" }
+      ]
+    }
+  ]
+}`,
+  };
+
+  const builder = builders[kind];
+  if (!builder) throw new Error(`Unknown extras kind: ${kind}`);
+  return builder();
+}
+
+// ============================================================
 // COMPONENTS
 // ============================================================
 const Icon = ({ name, size = 16, style = {} }) => {
@@ -785,10 +1121,16 @@ const Icon = ({ name, size = 16, style = {} }) => {
     file: "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
     users: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75",
     layers: "M12 2L2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5",
+    share: "M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8 M16 6l-4-4-4 4 M12 2v13",
+    award: "M12 15a7 7 0 100-14 7 7 0 000 14z M8.21 13.89L7 23l5-3 5 3-1.21-9.12",
+    image: "M21 19a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2zm-13-9a2 2 0 100-4 2 2 0 000 4z M21 15l-5-5L5 21",
+    external: "M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6 M15 3h6v6 M10 14L21 3",
   };
+  const path = icons[name];
+  if (!path) return null;
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
-      {icons[name].split(" M").map((p, i) => <path key={i} d={i === 0 ? p : "M" + p} />)}
+      {path.split(" M").map((p, i) => <path key={i} d={i === 0 ? p : "M" + p} />)}
     </svg>
   );
 }
@@ -1211,6 +1553,440 @@ function SettingsModal({ config, onSave, onClose, t }) {
 }
 
 // ============================================================
+// DETAIL LEVEL + EXTRAS CONTROLS (form area)
+// ============================================================
+function DetailAndExtrasControls({ detailLevel, setDetailLevel, extrasEnabled, setExtrasEnabled, t }) {
+  const detailOpts = [
+    { key: "quick",    label: t.detailQuick,    desc: t.detailQuickDesc },
+    { key: "standard", label: t.detailStandard, desc: t.detailStandardDesc },
+    { key: "full",     label: t.detailFull,     desc: t.detailFullDesc },
+  ];
+  const extrasList = [
+    { key: "worksheet",       label: t.extrasWorksheet,       desc: t.extrasWorksheetDesc,       icon: "file" },
+    { key: "anchorChart",     label: t.extrasAnchorChart,     desc: t.extrasAnchorChartDesc,     icon: "layers" },
+    { key: "flashcards",      label: t.extrasFlashcards,      desc: t.extrasFlashcardsDesc,      icon: "book" },
+    { key: "discussionCards", label: t.extrasDiscussionCards, desc: t.extrasDiscussionCardsDesc, icon: "users" },
+    { key: "diagram",         label: t.extrasDiagram,         desc: t.extrasDiagramDesc,         icon: "share" },
+    { key: "badges",          label: t.extrasBadges,          desc: t.extrasBadgesDesc,          icon: "award" },
+    { key: "imageSearch",     label: t.extrasImageSearch,     desc: t.extrasImageSearchDesc,     icon: "image" },
+  ];
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+          {t.detailLevel}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+          {detailOpts.map(o => {
+            const active = detailLevel === o.key;
+            return (
+              <button key={o.key} onClick={() => setDetailLevel(o.key)} style={{
+                textAlign: "left", padding: "10px 12px",
+                background: active ? "var(--accent-bg)" : "var(--bg-surface)",
+                color: active ? "var(--accent)" : "var(--text-primary)",
+                border: `1px solid ${active ? "var(--accent)" : "var(--border-default)"}`,
+                borderRadius: "var(--radius-md)", cursor: "pointer",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{o.label}</div>
+                <div style={{ fontSize: 11, color: active ? "var(--accent)" : "var(--text-secondary)", lineHeight: 1.4 }}>{o.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+          {t.extrasLabel}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10, lineHeight: 1.5 }}>{t.extrasHint}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 6 }}>
+          {extrasList.map(e => {
+            const on = !!extrasEnabled[e.key];
+            return (
+              <label key={e.key} style={{
+                display: "flex", gap: 8, alignItems: "flex-start",
+                padding: "8px 10px",
+                background: on ? "var(--accent-bg)" : "var(--bg-surface)",
+                border: `1px solid ${on ? "var(--accent)" : "var(--border-default)"}`,
+                borderRadius: "var(--radius-md)", cursor: "pointer",
+              }}>
+                <input
+                  type="checkbox" checked={on}
+                  onChange={(ev) => setExtrasEnabled(s => ({ ...s, [e.key]: ev.target.checked }))}
+                  style={{ marginTop: 2 }}
+                />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, display: "block", color: on ? "var(--accent)" : "var(--text-primary)" }}>{e.label}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>{e.desc}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// EXTRAS TAB RENDERERS
+// One render component per kind. Each shows a "Generate" button
+// when no content exists, a spinner while loading, an error if
+// the call failed, and the rendered output otherwise.
+// ============================================================
+function ExtraTabFrame({ children, onGenerate, loading, hasContent, t, printable, printRef }) {
+  return (
+    <div>
+      {hasContent && (
+        <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
+          <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={onGenerate}>{t.extraRegenerate}</Button>
+          {printable && <Button variant="ghost" icon={<Icon name="print" size={13} />} onClick={() => window.print()}>{t.print}</Button>}
+        </div>
+      )}
+      {!hasContent && !loading && (
+        <div style={{ padding: "32px 16px", textAlign: "center" }}>
+          <Button variant="primary" icon={<Icon name="sparkles" size={14} />} onClick={onGenerate}>{t.extraGenerate}</Button>
+        </div>
+      )}
+      {loading && (
+        <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-secondary)" }}>
+          <Icon name="refresh" size={20} style={{ animation: "spin 0.8s linear infinite" }} />
+          <div style={{ marginTop: 8, fontSize: 13 }}>{t.extraGenerating}</div>
+        </div>
+      )}
+      {hasContent && <div ref={printRef}>{children}</div>}
+    </div>
+  );
+}
+
+function WorksheetTab({ data, loading, onGenerate, t }) {
+  const [showAnswers, setShowAnswers] = useState(false);
+  const has = data && !data._error;
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t} printable>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div>
+          <div className="no-print" style={{ marginBottom: 12, display: "flex", gap: 6 }}>
+            <button onClick={() => setShowAnswers(false)} style={miniToggle(!showAnswers)}>{t.printWithoutAnswers}</button>
+            <button onClick={() => setShowAnswers(true)} style={miniToggle(showAnswers)}>{t.printWithAnswers}</button>
+          </div>
+          <div style={{ background: "var(--bg-surface)", padding: 20, border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{data.title}</h2>
+            {data.instructions && <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16, fontStyle: "italic" }}>{data.instructions}</p>}
+            <ol style={{ listStyle: "decimal inside", padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+              {(data.exercises || []).map((ex, i) => (
+                <li key={i} style={{ fontSize: 14, lineHeight: 1.6 }}>
+                  <span style={{ fontWeight: 600 }}>{asLine(ex.question)}</span>
+                  {showAnswers && ex.answer && (
+                    <div style={{ marginTop: 6, padding: "6px 10px", background: "var(--success-bg)", borderLeft: "3px solid var(--success-text)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                      <strong>{t.answerKey}:</strong> {asLine(ex.answer)}
+                      {ex.explanation && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3, fontStyle: "italic" }}>{asLine(ex.explanation)}</div>}
+                    </div>
+                  )}
+                  {!showAnswers && <div style={{ minHeight: 24, borderBottom: "1px dotted var(--border-default)", marginTop: 4 }} />}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function AnchorChartTab({ data, loading, onGenerate, t }) {
+  const has = data && !data._error;
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t} printable>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div style={{ background: "#FFFEF7", border: "2px solid #E8C547", borderRadius: "var(--radius-lg)", padding: 24 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, textAlign: "center", color: "#3A2C00" }}>{data.title}</h2>
+          {data.subtitle && <p style={{ fontSize: 13, textAlign: "center", color: "var(--text-secondary)", marginBottom: 18, fontStyle: "italic" }}>{data.subtitle}</p>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            {(data.sections || []).map((sec, i) => (
+              <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid #E8C547", borderRadius: "var(--radius-md)", padding: "12px 14px" }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: "#7A5800" }}>{sec.heading}</div>
+                <ul style={{ listStyle: "disc inside", fontSize: 13, lineHeight: 1.6, padding: 0, margin: 0 }}>
+                  {(sec.items || []).map((it, j) => <li key={j}>{asLine(it)}</li>)}
+                </ul>
+                {sec.visualHint && <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic" }}>✏️ {sec.visualHint}</div>}
+              </div>
+            ))}
+          </div>
+          {data.keyTakeaway && (
+            <div style={{ marginTop: 18, padding: "12px 16px", background: "#FFF4D2", border: "1px dashed #C9A013", borderRadius: "var(--radius-md)", textAlign: "center" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#7A5800", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>★ {t.keyTakeaway}</div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{data.keyTakeaway}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function BadgesTab({ data, loading, onGenerate, t }) {
+  const has = data && !data._error;
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t} printable>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
+          {(data.badges || []).map((b, i) => (
+            <div key={i} style={{
+              background: b.color || "#FFE8B5",
+              color: b.textColor || "#3A2C00",
+              border: "3px solid rgba(0,0,0,0.1)",
+              borderRadius: "50%",
+              aspectRatio: "1 / 1",
+              padding: 16,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center",
+              boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+            }}>
+              <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 6 }}>{b.emoji || "⭐"}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>{b.title}</div>
+              <div style={{ fontSize: 10, lineHeight: 1.3, opacity: 0.85 }}>{b.criterion}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function FlashcardsTab({ data, loading, onGenerate, t }) {
+  const has = data && !data._error;
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t} printable>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div>
+          {data.title && <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{data.title}</h3>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            {(data.cards || []).map((c, i) => (
+              <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+                <div style={{ padding: "12px 14px", background: "var(--accent-bg)", color: "var(--accent)", fontWeight: 700, fontSize: 16, textAlign: "center" }}>{c.front}</div>
+                <div style={{ padding: "10px 14px", fontSize: 13, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{t.cardBack}</div>
+                  {c.back}
+                  {c.example && (
+                    <div style={{ marginTop: 6, fontSize: 12, fontStyle: "italic", color: "var(--text-secondary)" }}>
+                      <span style={{ fontWeight: 600 }}>{t.cardExample}:</span> {c.example}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function DiscussionCardsTab({ data, loading, onGenerate, t }) {
+  const has = data && !data._error;
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t} printable>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div>
+          {data.title && <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{data.title}</h3>}
+          {data.instructions && <p style={{ fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic", marginBottom: 14 }}>{data.instructions}</p>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+            {(data.cards || []).map((c, i) => (
+              <div key={i} style={{ background: "#F4EEFB", border: "2px dashed #6B3E8E", borderRadius: "var(--radius-md)", padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#6B3E8E", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>#{c.n || i + 1}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>{c.question}</div>
+                {c.listenFor && (
+                  <div className="no-print" style={{ fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic", paddingTop: 6, borderTop: "1px dashed rgba(107,62,142,0.3)" }}>
+                    <strong>{t.listenFor}:</strong> {c.listenFor}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function DiagramTab({ data, loading, onGenerate, t }) {
+  const has = data && !data._error;
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!has || !ref.current) return;
+    // Lazy-load mermaid via CDN if not already loaded
+    if (!window.mermaid) {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
+      script.onload = () => {
+        window.mermaid.initialize({ startOnLoad: false, theme: "default" });
+        renderMermaid();
+      };
+      document.head.appendChild(script);
+    } else {
+      renderMermaid();
+    }
+    async function renderMermaid() {
+      try {
+        const { svg } = await window.mermaid.render(`mmd-${Date.now()}`, data.code);
+        if (ref.current) ref.current.innerHTML = svg;
+      } catch (e) {
+        if (ref.current) ref.current.innerHTML = `<div style="color:var(--danger-text);padding:12px;background:var(--danger-bg);border-radius:6px;font-size:12px;">Mermaid error: ${e.message}</div>`;
+      }
+    }
+  }, [data, has]);
+
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t} printable>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{data.title}</h3>
+          {data.description && <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>{data.description}</p>}
+          <div ref={ref} style={{ background: "var(--bg-surface)", padding: 16, border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", overflow: "auto", textAlign: "center" }} />
+          {data.useCase && <p style={{ marginTop: 8, fontSize: 11, color: "var(--text-tertiary)", fontStyle: "italic" }}>↳ {data.useCase}</p>}
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function ImageSearchTab({ data, loading, onGenerate, t }) {
+  const has = data && !data._error;
+  return (
+    <ExtraTabFrame onGenerate={onGenerate} loading={loading} hasContent={has} t={t}>
+      {data?._error && <ErrorBox msg={data._error} t={t} />}
+      {has && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {(data.phaseSearches || []).map((ph, i) => (
+            <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "12px 14px" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{ph.phaseName}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {(ph.searches || []).map((s, j) => (
+                  <a key={j} href={s.url} target="_blank" rel="noopener noreferrer" style={{
+                    display: "flex", gap: 10, padding: "8px 10px",
+                    background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-sm)", textDecoration: "none", color: "var(--text-primary)",
+                  }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em", minWidth: 70 }}>{s.source}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, display: "block" }}>"{s.query}"</span>
+                      {s.why && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{s.why}</span>}
+                    </span>
+                    <Icon name="external" size={13} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </ExtraTabFrame>
+  );
+}
+
+function ErrorBox({ msg, t }) {
+  return (
+    <div style={{ padding: "12px 14px", background: "var(--danger-bg)", border: "1px solid var(--danger-text)", borderRadius: "var(--radius-md)", color: "var(--danger-text)", fontSize: 13 }}>
+      <strong>{t.extraError}:</strong> {msg}
+    </div>
+  );
+}
+
+const miniToggle = (active) => ({
+  padding: "5px 10px", fontSize: 12, fontWeight: 500,
+  background: active ? "var(--accent)" : "transparent",
+  color: active ? "#fff" : "var(--text-secondary)",
+  border: `1px solid ${active ? "var(--accent)" : "var(--border-default)"}`,
+  borderRadius: "var(--radius-sm)", cursor: "pointer",
+});
+
+// ============================================================
+// LESSON CARD WITH TABS — wraps the plan and the extras tabs
+// ============================================================
+function LessonCardWithTabs({ lesson, t, extrasEnabled, extrasCache, loadingExtras, onGenerateExtra, onForceRegenerate, activeTab, setActiveTab }) {
+  const tabs = [
+    { key: "plan",            label: t.tabPlan,            icon: "book",   alwaysShow: true },
+    { key: "worksheet",       label: t.tabWorksheet,       icon: "file" },
+    { key: "anchorChart",     label: t.tabAnchorChart,     icon: "layers" },
+    { key: "flashcards",      label: t.tabFlashcards,      icon: "book" },
+    { key: "discussionCards", label: t.tabDiscussionCards, icon: "users" },
+    { key: "diagram",         label: t.tabDiagram,         icon: "share" },
+    { key: "badges",          label: t.tabBadges,          icon: "award" },
+    { key: "imageSearch",     label: t.tabImageSearch,     icon: "image" },
+  ];
+  // Only show tabs whose extra is enabled (or already has data) + the plan tab.
+  const visibleTabs = tabs.filter(tab => {
+    if (tab.alwaysShow) return true;
+    if (extrasEnabled[tab.key]) return true;
+    if (extrasCache[`${lesson.id}:${tab.key}`]) return true;
+    return false;
+  });
+
+  // When tab becomes active, auto-generate the extra if it isn't cached yet.
+  useEffect(() => {
+    if (activeTab === "plan") return;
+    const cacheKey = `${lesson.id}:${activeTab}`;
+    if (extrasCache[cacheKey]) return;
+    if (loadingExtras[cacheKey]) return;
+    onGenerateExtra(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, lesson.id]);
+
+  const cacheKey = `${lesson.id}:${activeTab}`;
+  const data = extrasCache[cacheKey];
+  const loading = !!loadingExtras[cacheKey];
+
+  return (
+    <div>
+      {/* Tab bar */}
+      <div className="no-print" style={{
+        display: "flex", gap: 4, marginBottom: 12, paddingBottom: 8,
+        borderBottom: "1px solid var(--border-subtle)",
+        overflowX: "auto", flexWrap: "wrap",
+      }}>
+        {visibleTabs.map(tab => {
+          const active = activeTab === tab.key;
+          const hasData = tab.key === "plan" || !!extrasCache[`${lesson.id}:${tab.key}`];
+          const isLoading = !!loadingExtras[`${lesson.id}:${tab.key}`];
+          return (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", fontSize: 12, fontWeight: 600,
+              background: active ? "var(--accent)" : "transparent",
+              color: active ? "#fff" : "var(--text-secondary)",
+              border: "1px solid " + (active ? "var(--accent)" : "var(--border-default)"),
+              borderRadius: "var(--radius-sm)", cursor: "pointer", whiteSpace: "nowrap",
+            }}>
+              <Icon name={tab.icon} size={12} />
+              {tab.label}
+              {isLoading && <Icon name="refresh" size={10} style={{ animation: "spin 0.8s linear infinite", opacity: 0.7 }} />}
+              {!isLoading && hasData && tab.key !== "plan" && <span style={{ width: 6, height: 6, borderRadius: "50%", background: active ? "#fff" : "var(--success-text)" }} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "plan" && <LessonCard lesson={lesson} t={t} version={lesson.version} />}
+      {activeTab === "worksheet" && <WorksheetTab data={data} loading={loading} onGenerate={() => onForceRegenerate("worksheet")} t={t} />}
+      {activeTab === "anchorChart" && <AnchorChartTab data={data} loading={loading} onGenerate={() => onForceRegenerate("anchorChart")} t={t} />}
+      {activeTab === "badges" && <BadgesTab data={data} loading={loading} onGenerate={() => onForceRegenerate("badges")} t={t} />}
+      {activeTab === "flashcards" && <FlashcardsTab data={data} loading={loading} onGenerate={() => onForceRegenerate("flashcards")} t={t} />}
+      {activeTab === "discussionCards" && <DiscussionCardsTab data={data} loading={loading} onGenerate={() => onForceRegenerate("discussionCards")} t={t} />}
+      {activeTab === "diagram" && <DiagramTab data={data} loading={loading} onGenerate={() => onForceRegenerate("diagram")} t={t} />}
+      {activeTab === "imageSearch" && <ImageSearchTab data={data} loading={loading} onGenerate={() => onForceRegenerate("imageSearch")} t={t} />}
+    </div>
+  );
+}
+
+// ============================================================
 // LESSON CARD
 // ============================================================
 function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
@@ -1304,7 +2080,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
         {/* Board layout */}
         {lesson.boardLayout && (
           <Section icon="layers" label={t.boardLayout}>
-            <div style={{ background: "#F8F4EB", border: "1px dashed #C9A013", borderRadius: "var(--radius-md)", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, fontFamily: "ui-monospace, Menlo, monospace" }}>
+            <div style={{ background: "#F8F4EB", border: "1px dashed #C9A013", borderRadius: "var(--radius-md)", padding: "10px 14px", fontSize: 13, lineHeight: 1.6, fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "pre-wrap" }}>
               {lesson.boardLayout}
             </div>
           </Section>
@@ -1698,6 +2474,20 @@ function App() {
   const [subject, setSubject] = useState("");
   const [topic, setTopic] = useState("");
   const [duration, setDuration] = useState(60);
+  const [detailLevel, setDetailLevel] = useState("standard"); // 'quick' | 'standard' | 'full'
+  const [extrasEnabled, setExtrasEnabled] = useState({
+    worksheet: true,    // smart default ON
+    anchorChart: true,  // smart default ON
+    badges: false,
+    flashcards: false,
+    discussionCards: false,
+    diagram: false,
+    imageSearch: false,
+  });
+  // Cache of generated extras per lesson id; key = `${lessonId}:${kind}`
+  const [extrasCache, setExtrasCache] = useState({});
+  const [loadingExtras, setLoadingExtras] = useState({}); // { 'lessonId:kind': true }
+  const [activeTab, setActiveTab] = useState({}); // { lessonId: 'plan' | 'worksheet' | ... }
   const [pending, setPending] = useState(null);
   const [acceptedLesson, setAcceptedLesson] = useState(null);
   const [subLesson, setSubLesson] = useState(null);
@@ -1762,7 +2552,7 @@ function App() {
     try {
       const num = Math.floor(Math.random() * 4) + 2; // 2-5
       const prompts = Array.from({ length: num }, (_, i) =>
-        lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: i, totalBranches: num, language: config.language })
+        lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: i, totalBranches: num, language: config.language, detailLevel })
       );
       const results = await Promise.all(prompts.map((p) => runLLM(config, p)));
       setPending({ options: results.map((r, i) => ({ ...r, _id: `opt-${Date.now()}-${i}` })) });
@@ -1779,9 +2569,33 @@ function App() {
       stage, grade, subject, topic, duration,
       lesson: opt,
     });
-    setAcceptedLesson({ ...opt, id: opt._id, isSub: false, version: v });
+    const accepted = { ...opt, id: opt._id, isSub: false, version: v };
+    setAcceptedLesson(accepted);
     setPending(null);
     setSubLesson(null);
+    setActiveTab(tabs => ({ ...tabs, [accepted.id]: "plan" }));
+    // Auto-trigger any extras the user has enabled by default
+    const enabledKinds = Object.entries(extrasEnabled).filter(([, on]) => on).map(([k]) => k);
+    enabledKinds.forEach(kind => { generateExtra(accepted, kind); });
+  };
+
+  // Generate one extra. Safe to call multiple times — caches by (lessonId, kind).
+  const generateExtra = async (lesson, kind) => {
+    if (!lesson || !hasKey) return;
+    const cacheKey = `${lesson.id}:${kind}`;
+    if (extrasCache[cacheKey]) return; // already generated
+    if (loadingExtras[cacheKey]) return; // already in flight
+    setLoadingExtras(s => ({ ...s, [cacheKey]: true }));
+    try {
+      const result = await runLLM(config,
+        extrasPrompt({ kind, lesson, stage, grade, subject, topic, duration, language: config.language })
+      );
+      setExtrasCache(c => ({ ...c, [cacheKey]: result }));
+    } catch (e) {
+      setExtrasCache(c => ({ ...c, [cacheKey]: { _error: e.message } }));
+    } finally {
+      setLoadingExtras(s => { const next = { ...s }; delete next[cacheKey]; return next; });
+    }
   };
 
   // Load a previously saved version without re-saving. Sets up the form
@@ -2056,6 +2870,16 @@ function App() {
             )}
           </div>
 
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px dashed var(--border-default)" }}>
+            <DetailAndExtrasControls
+              detailLevel={detailLevel}
+              setDetailLevel={setDetailLevel}
+              extrasEnabled={extrasEnabled}
+              setExtrasEnabled={setExtrasEnabled}
+              t={t}
+            />
+          </div>
+
           <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8 }}>
             {(acceptedLesson || pending) && (
               <Button variant="secondary" icon={<Icon name="refresh" size={14} />} onClick={reset}>{t.reset}</Button>
@@ -2104,7 +2928,21 @@ function App() {
                 <Button variant="ghost" icon={<Icon name="download" size={13} />} onClick={exportMd}>{t.download}</Button>
               </div>
             </div>
-            <LessonCard lesson={acceptedLesson} t={t} version={acceptedLesson.version} />
+            <LessonCardWithTabs
+              lesson={acceptedLesson}
+              t={t}
+              extrasEnabled={extrasEnabled}
+              extrasCache={extrasCache}
+              loadingExtras={loadingExtras}
+              onGenerateExtra={(kind) => generateExtra(acceptedLesson, kind)}
+              onForceRegenerate={(kind) => {
+                const cacheKey = `${acceptedLesson.id}:${kind}`;
+                setExtrasCache(c => { const next = { ...c }; delete next[cacheKey]; return next; });
+                generateExtra(acceptedLesson, kind);
+              }}
+              activeTab={activeTab[acceptedLesson.id] || "plan"}
+              setActiveTab={(tab) => setActiveTab(s => ({ ...s, [acceptedLesson.id]: tab }))}
+            />
 
             {!subLesson && (
               <div className="no-print" style={{ marginTop: 14, padding: 16, background: "var(--bg-secondary)", border: "1px dashed var(--border-default)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
