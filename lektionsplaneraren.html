@@ -63,7 +63,7 @@ const { useState, useEffect, useMemo, useRef } = React;
 // App version (shown in bottom-right corner)
 // Bump this when you ship changes. Patch = small fixes, minor = features.
 // ============================================================
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.6.0";
 
 // ============================================================
 // Lesson library — saved lessons in localStorage, auto-versioned
@@ -255,6 +255,16 @@ function localizeLabel(swedishKey, language) {
   return EN_LABELS[swedishKey] || swedishKey;
 }
 
+// Single source of truth for what provider buttons / indicators display.
+function providerDisplayName(provider, language) {
+  if (provider === "gemini") return "Gemini";
+  if (provider === "anthropic") return "Anthropic";
+  if (provider === "openai") return "ChatGPT";
+  if (provider === "grok") return "Grok";
+  if (provider === "local") return language === "sv" ? "Lokal" : "Local";
+  return provider;
+}
+
 const LANG = {
   sv: {
     title: "Lektionsplaneraren",
@@ -431,6 +441,42 @@ const LANG = {
     leaveBlankPlaceholder: "(lämna tomt om inte krävs)",
     createStandaloneSub: "Skapa vikarielektion",
     createStandaloneSubHint: "Generera en fristående vikarielektion utan att utgå från en sparad lektion. Allt material och alla instruktioner förbereds direkt i planen.",
+    // Help tooltips for API key fields
+    getKeyLink: "Hämta nyckel",
+    openaiHelp: "Faktureringskonto krävs hos OpenAI.",
+    grokHelp: "Konto hos xAI (console.x.ai) krävs.",
+    helpGeminiTitle: "Så här hämtar du en Gemini-nyckel",
+    helpGeminiSteps: [
+      "Gå till Google AI Studio (länken nedan).",
+      "Logga in med ditt Google-konto.",
+      "Klicka på 'Create API key'.",
+      "Kopiera nyckeln (börjar med AIza…) och klistra in här.",
+      "Gemini erbjuder en gratis nivå som räcker för många lektioner per dag.",
+    ],
+    helpAnthropicTitle: "Så här hämtar du en Anthropic-nyckel",
+    helpAnthropicSteps: [
+      "Gå till console.anthropic.com (länken nedan).",
+      "Skapa konto eller logga in.",
+      "Lägg till en faktureringsmetod under 'Plans & Billing'.",
+      "Gå till 'API Keys' och skapa en nyckel.",
+      "Kopiera nyckeln (börjar med sk-ant-…) och klistra in här.",
+    ],
+    helpOpenAITitle: "Så här hämtar du en OpenAI-nyckel",
+    helpOpenAISteps: [
+      "Gå till platform.openai.com/api-keys (länken nedan).",
+      "Skapa konto eller logga in.",
+      "Lägg till en faktureringsmetod under 'Billing'.",
+      "Klicka på 'Create new secret key' och kopiera den direkt — du kan inte se den igen senare.",
+      "Klistra in nyckeln (börjar med sk-…) här.",
+    ],
+    helpGrokTitle: "Så här hämtar du en Grok / xAI-nyckel",
+    helpGrokSteps: [
+      "Gå till console.x.ai (länken nedan).",
+      "Logga in med ditt X-konto eller skapa ett xAI-konto.",
+      "Lägg till en faktureringsmetod.",
+      "Gå till 'API Keys' och skapa en nyckel.",
+      "Kopiera nyckeln (börjar oftast med xai-…) och klistra in här.",
+    ],
   },
   en: {
     title: "Lesson Planner",
@@ -607,6 +653,42 @@ const LANG = {
     leaveBlankPlaceholder: "(leave blank if not needed)",
     createStandaloneSub: "Create substitute lesson",
     createStandaloneSubHint: "Generate a standalone substitute lesson without basing it on a saved plan. All materials and instructions are embedded directly in the plan.",
+    // Help tooltips for API key fields
+    getKeyLink: "Get key",
+    openaiHelp: "Billing account required at OpenAI.",
+    grokHelp: "An xAI account (console.x.ai) is required.",
+    helpGeminiTitle: "How to get a Gemini key",
+    helpGeminiSteps: [
+      "Go to Google AI Studio (link below).",
+      "Sign in with your Google account.",
+      "Click 'Create API key'.",
+      "Copy the key (starts with AIza…) and paste it here.",
+      "Gemini has a free tier that covers many lessons per day.",
+    ],
+    helpAnthropicTitle: "How to get an Anthropic key",
+    helpAnthropicSteps: [
+      "Go to console.anthropic.com (link below).",
+      "Create an account or sign in.",
+      "Add a payment method under 'Plans & Billing'.",
+      "Go to 'API Keys' and create a key.",
+      "Copy the key (starts with sk-ant-…) and paste it here.",
+    ],
+    helpOpenAITitle: "How to get an OpenAI key",
+    helpOpenAISteps: [
+      "Go to platform.openai.com/api-keys (link below).",
+      "Create an account or sign in.",
+      "Add a payment method under 'Billing'.",
+      "Click 'Create new secret key' and copy it immediately — you can't view it again later.",
+      "Paste the key (starts with sk-…) here.",
+    ],
+    helpGrokTitle: "How to get a Grok / xAI key",
+    helpGrokSteps: [
+      "Go to console.x.ai (link below).",
+      "Sign in with your X account or create an xAI account.",
+      "Add a payment method.",
+      "Go to 'API Keys' and create a key.",
+      "Copy the key (usually starts with xai-…) and paste it here.",
+    ],
   },
 };
 
@@ -741,9 +823,59 @@ async function callLocal({ baseUrl, apiKey, prompt, model }) {
   return safeJsonParse(text);
 }
 
+// OpenAI and xAI both expose OpenAI-compatible /v1/chat/completions endpoints.
+// We instruct the model to return JSON and ask for response_format json_object
+// where supported (OpenAI), which xAI accepts and ignores cleanly.
+async function callOpenAICompatible({ baseUrl, apiKey, prompt, model, providerLabel }) {
+  const url = `${baseUrl}/v1/chat/completions`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: "You return only valid JSON with no markdown formatting." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.8,
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`${providerLabel} ${res.status}: ${errText}`);
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || "";
+  return safeJsonParse(text);
+}
+
+async function callOpenAI({ apiKey, prompt, model }) {
+  return callOpenAICompatible({
+    baseUrl: "https://api.openai.com",
+    apiKey, prompt,
+    model: model || "gpt-5.5",
+    providerLabel: "OpenAI",
+  });
+}
+
+async function callGrok({ apiKey, prompt, model }) {
+  return callOpenAICompatible({
+    baseUrl: "https://api.x.ai",
+    apiKey, prompt,
+    model: model || "grok-4",
+    providerLabel: "Grok",
+  });
+}
+
 async function runLLM(config, prompt) {
   if (config.provider === "gemini") return callGemini({ apiKey: config.geminiKey, prompt, model: config.geminiModel });
   if (config.provider === "anthropic") return callAnthropic({ apiKey: config.anthropicKey, prompt, model: config.anthropicModel });
+  if (config.provider === "openai") return callOpenAI({ apiKey: config.openaiKey, prompt, model: config.openaiModel });
+  if (config.provider === "grok") return callGrok({ apiKey: config.grokKey, prompt, model: config.grokModel });
   if (config.provider === "local") return callLocal({ baseUrl: config.localUrl, apiKey: config.localKey, prompt, model: config.localModel });
   throw new Error("No provider configured");
 }
@@ -1338,6 +1470,64 @@ function Field({ label, children, hint }) {
   );
 }
 
+// A small "?" icon that opens a popover with instructions and an
+// external "Get key →" link to the provider's console.
+function HelpTooltip({ title, steps, linkUrl, linkLabel }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  return (
+    <span ref={wrapRef} style={{ position: "relative", display: "inline-flex", marginLeft: 6 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label="Help"
+        style={{
+          width: 16, height: 16, padding: 0,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          background: open ? "var(--accent)" : "var(--bg-secondary)",
+          color: open ? "#fff" : "var(--text-secondary)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "50%", fontSize: 11, fontWeight: 700, lineHeight: 1,
+          cursor: "pointer",
+        }}
+      >?</button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0,
+          zIndex: 60, width: 320, padding: 12,
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-md)",
+          boxShadow: "var(--shadow-md)",
+          fontSize: 12, lineHeight: 1.5, color: "var(--text-primary)",
+        }}>
+          {title && <div style={{ fontWeight: 600, marginBottom: 6 }}>{title}</div>}
+          <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+            {steps.map((s, i) => <li key={i}>{s}</li>)}
+          </ol>
+          {linkUrl && (
+            <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              marginTop: 10, padding: "5px 10px", fontSize: 12, fontWeight: 500,
+              background: "var(--accent)", color: "#fff",
+              borderRadius: "var(--radius-sm)", textDecoration: "none",
+            }}>{linkLabel || "Get key"} →</a>
+          )}
+        </div>
+      )}
+    </span>
+  );
+}
+
 function Input(props) {
   return <input {...props} style={{
     width: "100%", padding: "8px 12px", fontSize: 14,
@@ -1635,11 +1825,13 @@ function SettingsModal({ config, onSave, onClose, t }) {
           </Field>
 
           <Field label={t.provider}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
               {[
-                { id: "gemini", label: "Google Gemini" },
+                { id: "gemini",    label: "Google Gemini" },
                 { id: "anthropic", label: "Anthropic" },
-                { id: "local", label: "Lokal modell" },
+                { id: "openai",    label: "ChatGPT" },
+                { id: "grok",      label: "Grok (xAI)" },
+                { id: "local",     label: draft.language === "sv" ? "Lokal modell" : "Local model" },
               ].map(p => (
                 <button key={p.id} onClick={() => update("provider", p.id)} style={{
                   padding: "12px 10px", fontSize: 13, fontWeight: 500,
@@ -1655,7 +1847,12 @@ function SettingsModal({ config, onSave, onClose, t }) {
 
           {draft.provider === "gemini" && (
             <>
-              <Field label={t.apiKey} hint={t.geminiHelp}>
+              <Field label={<span>{t.apiKey}<HelpTooltip
+                title={t.helpGeminiTitle}
+                steps={t.helpGeminiSteps}
+                linkUrl="https://aistudio.google.com/app/apikey"
+                linkLabel={t.getKeyLink}
+              /></span>} hint={t.geminiHelp}>
                 <Input type="password" value={draft.geminiKey} onChange={(e) => update("geminiKey", e.target.value)} placeholder="AIza..." />
               </Field>
               <Field label={t.model}>
@@ -1672,7 +1869,12 @@ function SettingsModal({ config, onSave, onClose, t }) {
 
           {draft.provider === "anthropic" && (
             <>
-              <Field label={t.apiKey} hint={t.anthropicHelp}>
+              <Field label={<span>{t.apiKey}<HelpTooltip
+                title={t.helpAnthropicTitle}
+                steps={t.helpAnthropicSteps}
+                linkUrl="https://console.anthropic.com/settings/keys"
+                linkLabel={t.getKeyLink}
+              /></span>} hint={t.anthropicHelp}>
                 <Input type="password" value={draft.anthropicKey} onChange={(e) => update("anthropicKey", e.target.value)} placeholder="sk-ant-..." />
               </Field>
               <Field label={t.model}>
@@ -1680,6 +1882,48 @@ function SettingsModal({ config, onSave, onClose, t }) {
                   <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
                   <option value="claude-opus-4-5">claude-opus-4-5</option>
                   <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+                </Select>
+              </Field>
+            </>
+          )}
+
+          {draft.provider === "openai" && (
+            <>
+              <Field label={<span>{t.apiKey}<HelpTooltip
+                title={t.helpOpenAITitle}
+                steps={t.helpOpenAISteps}
+                linkUrl="https://platform.openai.com/api-keys"
+                linkLabel={t.getKeyLink}
+              /></span>} hint={t.openaiHelp}>
+                <Input type="password" value={draft.openaiKey} onChange={(e) => update("openaiKey", e.target.value)} placeholder="sk-..." />
+              </Field>
+              <Field label={t.model}>
+                <Select value={draft.openaiModel} onChange={(e) => update("openaiModel", e.target.value)}>
+                  <option value="gpt-5.5">gpt-5.5 ({draft.language === "sv" ? "flaggskepp" : "flagship"})</option>
+                  <option value="gpt-5.4">gpt-5.4</option>
+                  <option value="gpt-5.4-mini">gpt-5.4-mini ({draft.language === "sv" ? "snabbare, billigare" : "faster, cheaper"})</option>
+                  <option value="gpt-5.4-nano">gpt-5.4-nano ({draft.language === "sv" ? "billigast" : "cheapest"})</option>
+                </Select>
+              </Field>
+            </>
+          )}
+
+          {draft.provider === "grok" && (
+            <>
+              <Field label={<span>{t.apiKey}<HelpTooltip
+                title={t.helpGrokTitle}
+                steps={t.helpGrokSteps}
+                linkUrl="https://console.x.ai/"
+                linkLabel={t.getKeyLink}
+              /></span>} hint={t.grokHelp}>
+                <Input type="password" value={draft.grokKey} onChange={(e) => update("grokKey", e.target.value)} placeholder="xai-..." />
+              </Field>
+              <Field label={t.model}>
+                <Select value={draft.grokModel} onChange={(e) => update("grokModel", e.target.value)}>
+                  <option value="grok-4">grok-4 ({draft.language === "sv" ? "flaggskepp" : "flagship"})</option>
+                  <option value="grok-4-0709">grok-4-0709</option>
+                  <option value="grok-3">grok-3</option>
+                  <option value="grok-3-mini">grok-3-mini ({draft.language === "sv" ? "snabbare, billigare" : "faster, cheaper"})</option>
                 </Select>
               </Field>
             </>
@@ -2623,6 +2867,10 @@ function App() {
     geminiModel: "gemini-2.5-flash",
     anthropicKey: "",
     anthropicModel: "claude-sonnet-4-5-20250929",
+    openaiKey: "",
+    openaiModel: "gpt-5.5",
+    grokKey: "",
+    grokModel: "grok-4",
     localUrl: "http://localhost:1234",
     localKey: "",
     localModel: "local-model",
@@ -2703,6 +2951,8 @@ function App() {
   const hasKey = useMemo(() => {
     if (config.provider === "gemini") return !!config.geminiKey;
     if (config.provider === "anthropic") return !!config.anthropicKey;
+    if (config.provider === "openai") return !!config.openaiKey;
+    if (config.provider === "grok") return !!config.grokKey;
     if (config.provider === "local") return !!config.localUrl;
     return false;
   }, [config]);
@@ -2964,7 +3214,7 @@ function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
               <Icon name="key" size={12} />
-              <span>{config.provider === "gemini" ? "Gemini" : config.provider === "anthropic" ? "Anthropic" : (config.language === "sv" ? "Lokal" : "Local")}</span>
+              <span>{providerDisplayName(config.provider, config.language)}</span>
               {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
               {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
             </div>
@@ -3181,7 +3431,7 @@ function App() {
         </div>
       </div>
 
-      <AppVersionBadgeMount providerLabel={config.provider === "gemini" ? "Gemini" : config.provider === "anthropic" ? "Anthropic" : "Local"} onOpenLibrary={() => setShowLibrary(true)} />
+      <AppVersionBadgeMount providerLabel={providerDisplayName(config.provider, config.language)} onOpenLibrary={() => setShowLibrary(true)} />
     </div>
   );
 }
