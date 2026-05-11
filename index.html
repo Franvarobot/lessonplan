@@ -88,7 +88,7 @@
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 // ============================================================
 // Curriculum data (subset — full project has /curriculum module)
@@ -381,7 +381,7 @@ const T = {
   sv: {
     appTitle: 'Lektionsplanering',
     appSub: 'Mockup-modul för Frånvarokollen',
-    dailyCover: 'Daglig täckning', studio: 'Studio',
+    dailyCover: 'Daglig täckning', studio: 'Studio', subjects: 'Ämnen',
     quickHeader: 'Skapa lektion',
     quickSubheader: 'Genererar lektionsplan + avslutningsövning',
     generating: 'Genererar lektion…',
@@ -444,11 +444,32 @@ const T = {
     fullPageTitle: 'Lektionsplan',
     aboutTitle: 'Om denna prototyp',
     aboutBody: 'Detta är en prototyp som visar hur Frånvarokollen kan generera lektionsplaner när lärare är frånvarande. Klicka "Skapa lektion" på en rad nedan, eller utforska Studio-fliken för fullständig kontroll.',
+    // Versioning + Subjects + IO
+    versionLabel: 'Version', versions: 'Versioner', latest: 'senaste', auto: 'Auto-sparad',
+    versionsSavedHere: 'Versioner sparade lokalt (webbläsare).',
+    importBtn: 'Importera', exportBtn: 'Exportera',
+    importConfirm: 'Detta ersätter alla sparade lektioner. Fortsätt?',
+    importDone: 'Importerat',
+    importInvalid: 'Filen är ogiltig — inga ändringar gjorda.',
+    exportDone: 'Exporterat',
+    subjectsTitle: 'Ämnen och klasser',
+    subjectsSub: 'Gröna prickar = lektion klar att hålla. Klicka för att markera som använd (faded).',
+    noSavedYet: 'Inga sparade lektioner än. Generera först från Daglig täckning eller Studio.',
+    markedUsedBy: 'Använd av',
+    notUsedYet: 'Ej använd',
+    addClass: '+ Lägg till klass',
+    classPromptForLesson: 'Skriv klassnamn (t.ex. 4A):',
+    deleteLesson: 'Radera lektion',
+    deleteLessonConfirm: 'Radera denna lektion och alla versioner?',
+    lessonId: 'Lektion',
+    savedAt: 'Sparad',
+    clearUsed: 'Återställ använda',
+    storageWarning: 'Sparas i din webbläsares localStorage. Exportera regelbundet som säkerhetskopia.',
   },
   en: {
     appTitle: 'Lesson plan generator',
     appSub: 'Mockup module for Frånvarokollen',
-    dailyCover: 'Daily Cover', studio: 'Studio',
+    dailyCover: 'Daily Cover', studio: 'Studio', subjects: 'Subjects',
     quickHeader: 'Create lesson',
     quickSubheader: 'Generates lesson plan + exit exercise',
     generating: 'Generating lesson…',
@@ -510,6 +531,27 @@ const T = {
     fullPageTitle: 'Lesson plan',
     aboutTitle: 'About this prototype',
     aboutBody: 'This is a prototype showing how Frånvarokollen could generate lesson plans when teachers are absent. Click "Create lesson" on a row below, or explore the Studio tab for full control.',
+    // Versioning + Subjects + IO
+    versionLabel: 'Version', versions: 'Versions', latest: 'latest', auto: 'Auto-saved',
+    versionsSavedHere: 'Versions saved locally (browser).',
+    importBtn: 'Import', exportBtn: 'Export',
+    importConfirm: 'This will replace all saved lessons. Continue?',
+    importDone: 'Imported',
+    importInvalid: 'File is invalid — no changes made.',
+    exportDone: 'Exported',
+    subjectsTitle: 'Subjects and classes',
+    subjectsSub: 'Green dots = lesson ready. Click to mark as used (faded).',
+    noSavedYet: 'No saved lessons yet. Generate one from Daily Cover or Studio first.',
+    markedUsedBy: 'Used by',
+    notUsedYet: 'Not used yet',
+    addClass: '+ Add class',
+    classPromptForLesson: 'Class name (e.g. 4A):',
+    deleteLesson: 'Delete lesson',
+    deleteLessonConfirm: 'Delete this lesson and all its versions?',
+    lessonId: 'Lesson',
+    savedAt: 'Saved',
+    clearUsed: 'Reset used',
+    storageWarning: 'Stored in your browser\'s localStorage. Export regularly as a backup.',
   },
 };
 
@@ -527,14 +569,200 @@ function useHashRoute() {
   return [route, (r) => { window.location.hash = r; }];
 }
 
-// Plans saved during this session — keyed by lesson id. In-memory only.
+// ============================================================
+// planStore — localStorage-backed with auto-versioning.
+// Backward-compatible API: .get(id) returns { plan, lesson, savedAt }
+// where `plan` is the latest version's content. .set(id, plan, lesson)
+// appends a new version (v1, v2, v3...) automatically.
+//
+// Storage shape:
+//   {
+//     "schema": 1,
+//     "items": {
+//       "<lessonId>": {
+//         lesson: { id, class, subject, ... },
+//         versions: [{ v: 1, plan, savedAt }, { v: 2, plan, savedAt }, ...],
+//         usedBy: ["4A", "4B"],
+//         knownClasses: ["4A", "4B", "4C"],  // free-text classes the user has typed for this lesson
+//       }
+//     }
+//   }
+// ============================================================
+const STORAGE_KEY = 'fra.lessonStudio.v1';
+
+function notifyStoreChange() {
+  window.dispatchEvent(new Event('lp-store-change'));
+}
+
 const planStore = (() => {
-  const map = new Map();
+  function readAll() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { schema: 1, items: {} };
+      const parsed = JSON.parse(raw);
+      if (!parsed.items) return { schema: 1, items: {} };
+      return parsed;
+    } catch {
+      return { schema: 1, items: {} };
+    }
+  }
+
+  function writeAll(data) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      notifyStoreChange();
+    } catch (e) {
+      console.error('planStore write failed', e);
+    }
+  }
+
   return {
-    get: (id) => map.get(id),
-    set: (id, plan, lesson) => map.set(id, { plan, lesson, savedAt: Date.now() }),
+    // Back-compat: returns { plan, lesson, savedAt } using the LATEST version.
+    get(id) {
+      const data = readAll();
+      const item = data.items[id];
+      if (!item || !item.versions?.length) return undefined;
+      const latest = item.versions[item.versions.length - 1];
+      return { plan: latest.plan, lesson: item.lesson, savedAt: latest.savedAt, version: latest.v };
+    },
+
+    // Back-compat: appends a new version (v1 first time, v2 next, etc).
+    set(id, plan, lesson) {
+      const data = readAll();
+      const existing = data.items[id];
+      if (existing) {
+        const nextV = (existing.versions[existing.versions.length - 1]?.v || 0) + 1;
+        existing.versions.push({ v: nextV, plan, savedAt: Date.now() });
+        existing.lesson = lesson || existing.lesson;
+      } else {
+        data.items[id] = {
+          lesson,
+          versions: [{ v: 1, plan, savedAt: Date.now() }],
+          usedBy: [],
+          knownClasses: lesson?.class ? [lesson.class] : [],
+        };
+      }
+      writeAll(data);
+    },
+
+    // New: get a specific version (or latest if not specified).
+    getVersion(id, v) {
+      const data = readAll();
+      const item = data.items[id];
+      if (!item) return undefined;
+      if (v == null) return item.versions[item.versions.length - 1];
+      return item.versions.find(ver => ver.v === v);
+    },
+
+    // New: list every version for a lesson.
+    getAllVersions(id) {
+      const data = readAll();
+      return data.items[id]?.versions || [];
+    },
+
+    // New: list every saved lesson.
+    getAll() {
+      const data = readAll();
+      return Object.entries(data.items).map(([id, item]) => ({ id, ...item }));
+    },
+
+    // New: toggle a class in usedBy.
+    toggleClassUsage(id, className) {
+      const data = readAll();
+      const item = data.items[id];
+      if (!item) return;
+      item.usedBy = item.usedBy || [];
+      if (item.usedBy.includes(className)) {
+        item.usedBy = item.usedBy.filter(c => c !== className);
+      } else {
+        item.usedBy.push(className);
+      }
+      writeAll(data);
+    },
+
+    // New: clear all "used" marks for a lesson.
+    clearUsed(id) {
+      const data = readAll();
+      const item = data.items[id];
+      if (!item) return;
+      item.usedBy = [];
+      writeAll(data);
+    },
+
+    // New: register a class name for a lesson (so it shows as a dot).
+    addClassToLesson(id, className) {
+      const data = readAll();
+      const item = data.items[id];
+      if (!item) return;
+      item.knownClasses = item.knownClasses || [];
+      if (!item.knownClasses.includes(className)) {
+        item.knownClasses.push(className);
+        writeAll(data);
+      }
+    },
+
+    // New: remove a class entirely (and unmark used).
+    removeClassFromLesson(id, className) {
+      const data = readAll();
+      const item = data.items[id];
+      if (!item) return;
+      item.knownClasses = (item.knownClasses || []).filter(c => c !== className);
+      item.usedBy = (item.usedBy || []).filter(c => c !== className);
+      writeAll(data);
+    },
+
+    deleteLesson(id) {
+      const data = readAll();
+      delete data.items[id];
+      writeAll(data);
+    },
+
+    exportAll() {
+      return readAll();
+    },
+
+    importAll(payload) {
+      if (!payload || typeof payload !== 'object' || !payload.items) return false;
+      writeAll({ schema: 1, items: payload.items });
+      return true;
+    },
   };
 })();
+
+// React hook: rerender when planStore changes.
+function useStoreVersion() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setTick(t => t + 1);
+    window.addEventListener('lp-store-change', onChange);
+    window.addEventListener('storage', onChange); // cross-tab
+    return () => {
+      window.removeEventListener('lp-store-change', onChange);
+      window.removeEventListener('storage', onChange);
+    };
+  }, []);
+  return tick;
+}
+
+// ============================================================
+// Toast
+// ============================================================
+function useToast() {
+  const [msg, setMsg] = useState(null);
+  function show(m) {
+    setMsg(m);
+    setTimeout(() => setMsg(null), 2000);
+  }
+  const node = msg ? (
+    <div style={{
+      position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+      background: 'var(--text-primary)', color: 'white',
+      padding: '8px 16px', borderRadius: 'var(--radius-md)',
+      fontSize: 13, zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+    }}>{msg}</div>
+  ) : null;
+  return { show, node };
+}
 
 // ============================================================
 // App
@@ -568,15 +796,16 @@ function parseRoute(route) {
 }
 
 // ============================================================
-// Coordinator app (Daily Cover + Studio)
+// Coordinator app (Daily Cover + Studio + Subjects)
 // ============================================================
 function CoordinatorApp({ t, lang, setLang, navigate }) {
   const [view, setView] = useState('list');
   const [quickPlan, setQuickPlan] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const toast = useToast();
 
-  // Force a re-render when a plan gets saved (so row buttons flip to "View plan")
-  const [savedTick, setSavedTick] = useState(0);
+  // Force re-render when planStore changes
+  useStoreVersion();
 
   async function handleQuickGenerate(lesson) {
     setGenerating(true);
@@ -596,25 +825,27 @@ function CoordinatorApp({ t, lang, setLang, navigate }) {
     if (stored) setQuickPlan({ lesson, plan: stored.plan, saved: true });
   }
 
+  // Save = append new version. With auto-versioning, every Save = new vN.
   function handleSave() {
     if (!quickPlan?.plan) return;
     planStore.set(quickPlan.lesson.id, quickPlan.plan, quickPlan.lesson);
+    const ver = planStore.get(quickPlan.lesson.id)?.version;
     setQuickPlan({ ...quickPlan, saved: true });
-    setSavedTick(s => s + 1);
+    toast.show(`${t.saved} (v${ver})`);
   }
 
   return (
-    <Shell t={t} lang={lang} setLang={setLang} view={view} setView={setView}>
+    <Shell t={t} lang={lang} setLang={setLang} view={view} setView={setView} toast={toast}>
       {view === 'list' && (
         <DailyCoverList
-          key={savedTick}
           lessons={MOCK_LESSONS}
           onQuickGen={handleQuickGenerate}
           onViewSaved={handleViewSaved}
           t={t} lang={lang}
         />
       )}
-      {view === 'studio' && <Studio t={t} lang={lang} />}
+      {view === 'studio' && <Studio t={t} lang={lang} toast={toast} />}
+      {view === 'subjects' && <SubjectsView t={t} lang={lang} navigate={navigate} toast={toast} />}
 
       {quickPlan && (
         <QuickModal
@@ -636,7 +867,7 @@ function CoordinatorApp({ t, lang, setLang, navigate }) {
 // ============================================================
 // Shell — top bar, language toggle, page width
 // ============================================================
-function Shell({ children, t, lang, setLang, view, setView }) {
+function Shell({ children, t, lang, setLang, view, setView, toast }) {
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 18px 60px' }}>
       <header className="no-print" style={{ marginBottom: 14 }}>
@@ -647,8 +878,9 @@ function Shell({ children, t, lang, setLang, view, setView }) {
               <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', fontSize: 14, marginLeft: 8 }}>· {t.appSub}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{t.backendStub}</span>
+            {toast && <ImportExportButtons t={t} toast={toast} />}
             <LangToggle lang={lang} setLang={setLang} />
           </div>
         </div>
@@ -663,12 +895,60 @@ function Shell({ children, t, lang, setLang, view, setView }) {
           }}>
             <TabBtn active={view === 'list'} onClick={() => setView('list')}>{t.dailyCover}</TabBtn>
             <TabBtn active={view === 'studio'} onClick={() => setView('studio')}>{t.studio}</TabBtn>
+            <TabBtn active={view === 'subjects'} onClick={() => setView('subjects')}>{t.subjects}</TabBtn>
           </div>
         )}
       </header>
 
       {children}
+      {toast?.node}
     </div>
+  );
+}
+
+function ImportExportButtons({ t, toast }) {
+  const fileRef = useRef(null);
+
+  function handleExport() {
+    const payload = planStore.exportAll();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lektionsplaner-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.show(t.exportDone);
+  }
+
+  function handleImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (!confirm(t.importConfirm)) { e.target.value = ''; return; }
+        const ok = planStore.importAll(parsed);
+        toast.show(ok ? t.importDone : t.importInvalid);
+      } catch {
+        toast.show(t.importInvalid);
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <>
+      <button onClick={handleExport} style={ghostBtn({ padding: '5px 10px', fontSize: 12 })} title={t.exportBtn}>
+        ↓ {t.exportBtn}
+      </button>
+      <button onClick={() => fileRef.current?.click()} style={ghostBtn({ padding: '5px 10px', fontSize: 12 })} title={t.importBtn}>
+        ↑ {t.importBtn}
+      </button>
+      <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleImport} style={{ display: 'none' }} />
+    </>
   );
 }
 
@@ -731,6 +1011,7 @@ function successBtn(extra = {}) {
 // Daily Cover list
 // ============================================================
 function DailyCoverList({ lessons, onQuickGen, onViewSaved, t, lang }) {
+  useStoreVersion();
   return (
     <div>
       <div style={{
@@ -758,6 +1039,7 @@ function DailyCoverList({ lessons, onQuickGen, onViewSaved, t, lang }) {
 
 function LessonRow({ lesson, onQuickGen, onViewSaved, t }) {
   const stored = planStore.get(lesson.id);
+  const versionCount = planStore.getAllVersions(lesson.id).length;
   return (
     <div style={{
       background: 'var(--bg-surface)',
@@ -773,6 +1055,12 @@ function LessonRow({ lesson, onQuickGen, onViewSaved, t }) {
           <span style={{ fontWeight: 500, fontSize: 14 }}>{lesson.class}</span>
           <span style={{ fontSize: 14 }}>{lesson.subject}</span>
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>· {lesson.room}</span>
+          {versionCount > 0 && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, background: 'var(--bg-secondary)',
+              color: 'var(--text-secondary)', padding: '1px 6px', borderRadius: 3,
+            }}>v{versionCount}</span>
+          )}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
           {lesson.teacher} · {lesson.time} · {lesson.length} {t.min}
@@ -786,11 +1074,20 @@ function LessonRow({ lesson, onQuickGen, onViewSaved, t }) {
 }
 
 // ============================================================
-// Quick modal
+// Quick modal — with version tabs at the top
 // ============================================================
-function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, onSave, onOpenFull, onSendToSub, t, lang }) {
+function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, onSave, onOpenFull, t, lang }) {
   const [copyHint, setCopyHint] = useState(false);
   const [sendDialog, setSendDialog] = useState(false);
+  const [viewingVersion, setViewingVersion] = useState(null); // null = use `plan` prop (current generation)
+  useStoreVersion();
+
+  const versions = planStore.getAllVersions(lesson.id);
+  // When a saved version is selected, show its plan instead of the live one.
+  const displayedPlan = viewingVersion != null
+    ? versions.find(v => v.v === viewingVersion)?.plan
+    : plan;
+
   return (
     <>
     <div style={{
@@ -818,18 +1115,27 @@ function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, on
           <button onClick={onClose} style={ghostBtn({ padding: '4px 10px' })}>✕</button>
         </div>
 
-        {generating || !plan
-          ? <LoadingSpinner label={t.generating} />
-          : <div style={{ padding: '16px 18px' }}><PlanView plan={plan} t={t} /></div>}
+        {versions.length > 0 && !generating && (
+          <VersionTabs
+            versions={versions}
+            activeV={viewingVersion ?? versions[versions.length - 1].v}
+            onSelect={(v) => setViewingVersion(v)}
+            t={t}
+          />
+        )}
 
-        {!generating && plan && (
+        {generating || !displayedPlan
+          ? <LoadingSpinner label={t.generating} />
+          : <div style={{ padding: '16px 18px' }}><PlanView plan={displayedPlan} t={t} /></div>}
+
+        {!generating && displayedPlan && (
           <div style={{
             padding: '12px 18px', borderTop: '0.5px solid var(--border-subtle)',
             display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap',
           }}>
-            <button onClick={onRegenerate} style={ghostBtn()}>↻ {t.regenerate}</button>
+            <button onClick={() => { setViewingVersion(null); onRegenerate(); }} style={ghostBtn()}>↻ {t.regenerate}</button>
             <button onClick={() => {
-              navigator.clipboard?.writeText(plainText(plan));
+              navigator.clipboard?.writeText(plainText(displayedPlan));
               setCopyHint(true);
               setTimeout(() => setCopyHint(false), 1200);
             }} style={ghostBtn()}>{copyHint ? t.copied : t.copy}</button>
@@ -837,21 +1143,58 @@ function QuickModal({ lesson, plan, generating, saved, onClose, onRegenerate, on
             <button onClick={() => { onSave(); setSendDialog(true); }} style={ghostBtn()}>{t.sendToSub}</button>
             <button onClick={onOpenFull} style={ghostBtn()}>{t.openFullPage} →</button>
             <button onClick={onSave} style={primaryBtn()}>
-              {saved ? '✓ ' + t.saved : t.saveToLesson}
+              {saved && viewingVersion == null ? '✓ ' + t.saved : t.saveToLesson}
             </button>
           </div>
         )}
       </div>
     </div>
 
-    {sendDialog && plan && (
+    {sendDialog && displayedPlan && (
       <SendDialog
-        plan={plan} lesson={lesson} lessonId={lesson.id}
+        plan={displayedPlan} lesson={lesson} lessonId={lesson.id}
         onClose={() => setSendDialog(false)}
         t={t} lang={lang}
       />
     )}
     </>
+  );
+}
+
+function VersionTabs({ versions, activeV, onSelect, t }) {
+  return (
+    <div style={{
+      padding: '8px 18px',
+      borderBottom: '0.5px solid var(--border-subtle)',
+      background: 'var(--bg-secondary)',
+      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {t.versions}
+      </span>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {versions.map(ver => {
+          const isActive = ver.v === activeV;
+          const isLatest = ver.v === versions[versions.length - 1].v;
+          return (
+            <button
+              key={ver.v}
+              onClick={() => onSelect(ver.v)}
+              title={new Date(ver.savedAt).toLocaleString()}
+              style={{
+                padding: '3px 9px', fontSize: 12, fontWeight: 500,
+                background: isActive ? 'var(--bg-info)' : 'var(--bg-surface)',
+                color: isActive ? 'var(--text-info)' : 'var(--text-secondary)',
+                border: '0.5px solid ' + (isActive ? 'var(--border-info)' : 'var(--border-subtle)'),
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              v{ver.v}{isLatest && ` · ${t.latest}`}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -871,9 +1214,10 @@ function LoadingSpinner({ label }) {
 }
 
 // ============================================================
-// Studio page
+// Studio page — kept as before, but now exposes "save to a lesson id"
+// so Studio-generated plans also flow into versioning + Subjects.
 // ============================================================
-function Studio({ t, lang }) {
+function Studio({ t, lang, toast }) {
   const [stage, setStage] = useState('grundskola');
   const [subject, setSubject] = useState('matematik');
   const [grade, setGrade] = useState(5);
@@ -887,7 +1231,9 @@ function Studio({ t, lang }) {
   const [exitEx, setExitEx] = useState(true);
   const [diff, setDiff] = useState(true);
   const [plan, setPlan] = useState(null);
+  const [studioLessonId, setStudioLessonId] = useState(null); // assigned on first save
   const [generating, setGenerating] = useState(false);
+  useStoreVersion();
 
   const subjects = useMemo(
     () => stage === 'grundskola' ? SUBJECTS_GRUNDSKOLA : SUBJECTS_GYMNASIUM,
@@ -903,8 +1249,9 @@ function Studio({ t, lang }) {
     setPlan(null);
     await new Promise(r => setTimeout(r, 800));
     const subjMeta = subjects.find(s => s.key === subject);
+    const subjLabel = subjMeta?.name_sv || subject;
     const p = stubGenerate({
-      subject: subjMeta?.name_sv || subject,
+      subject: subjLabel,
       subjectKey: subject,
       grade: stage === 'grundskola' ? grade : undefined,
       language: planLang,
@@ -914,6 +1261,21 @@ function Studio({ t, lang }) {
     });
     setPlan(p);
     setGenerating(false);
+
+    // Auto-save with versioning — Studio plans get a stable synthetic ID
+    // so regenerating in the same session appends v2, v3, etc.
+    const id = studioLessonId || `studio-${subject}-${grade ?? ''}-${Date.now()}`;
+    if (!studioLessonId) setStudioLessonId(id);
+    const lessonRecord = {
+      id, class: '—',
+      subject: subjLabel, subjectKey: subject,
+      grade: stage === 'grundskola' ? grade : undefined,
+      room: 'Studio', teacher: '', length: duration,
+      time: new Date().toLocaleDateString(),
+    };
+    planStore.set(id, p, lessonRecord);
+    const ver = planStore.get(id)?.version;
+    toast?.show(`${t.saved} (v${ver})`);
   }
 
   return (
@@ -989,9 +1351,30 @@ function Studio({ t, lang }) {
               {lang === 'sv' ? 'Justera parametrarna och klicka på Generera lektion.' : 'Adjust parameters and click Generate lesson.'}
             </div>
           )}
+          {!generating && plan && studioLessonId && (
+            <StudioVersionStrip lessonId={studioLessonId} t={t} />
+          )}
           {!generating && plan && <PlanView plan={plan} t={t} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Slim version strip at the top of Studio preview (read-only — shows what's stored).
+function StudioVersionStrip({ lessonId, t }) {
+  const versions = planStore.getAllVersions(lessonId);
+  if (versions.length === 0) return null;
+  const latest = versions[versions.length - 1];
+  return (
+    <div style={{
+      marginBottom: 12, padding: '6px 10px',
+      background: 'var(--bg-success)', color: 'var(--text-success)',
+      borderRadius: 'var(--radius-sm)', fontSize: 12,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    }}>
+      <span>✓ {t.auto} · v{latest.v} · {versions.length} {t.versions.toLowerCase()}</span>
+      <span style={{ fontSize: 11, opacity: 0.7 }}>{new Date(latest.savedAt).toLocaleTimeString()}</span>
     </div>
   );
 }
@@ -1010,6 +1393,176 @@ function Toggle({ checked, onChange, label }) {
       <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ marginTop: 2, width: 'auto' }} />
       <span>{label}</span>
     </label>
+  );
+}
+
+// ============================================================
+// Subjects view — every saved lesson grouped by subject, with
+// per-class dots. Green dot = ready, faded dot = used.
+// ============================================================
+function SubjectsView({ t, lang, navigate, toast }) {
+  useStoreVersion();
+  const items = planStore.getAll();
+
+  // Group by subject (use subjectKey if available, else subject string)
+  const grouped = useMemo(() => {
+    const groups = {};
+    items.forEach(item => {
+      const key = item.lesson?.subjectKey || item.lesson?.subject || 'okänt';
+      const label = item.lesson?.subject || key;
+      if (!groups[key]) groups[key] = { label, items: [] };
+      groups[key].items.push(item);
+    });
+    return Object.entries(groups).map(([key, g]) => ({ key, ...g }));
+  }, [items]);
+
+  return (
+    <div>
+      <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 500 }}>{t.subjectsTitle}</h3>
+      <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text-secondary)' }}>{t.subjectsSub}</p>
+      <p style={{ margin: '0 0 18px', fontSize: 11, color: 'var(--text-tertiary)' }}>{t.storageWarning}</p>
+
+      {items.length === 0 ? (
+        <div style={{
+          padding: 40, textAlign: 'center', color: 'var(--text-tertiary)',
+          background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)',
+          border: '0.5px dashed var(--border-default)',
+        }}>
+          {t.noSavedYet}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {grouped.map(g => (
+            <SubjectGroup key={g.key} label={g.label} items={g.items} t={t} navigate={navigate} toast={toast} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubjectGroup({ label, items, t, navigate, toast }) {
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      border: '0.5px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-lg)',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '10px 16px',
+        background: 'var(--bg-secondary)',
+        borderBottom: '0.5px solid var(--border-subtle)',
+        fontSize: 14, fontWeight: 500,
+      }}>
+        {label}
+        <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
+          · {items.length} {items.length === 1 ? 'lektion' : 'lektioner'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {items.map(item => (
+          <SubjectLessonRow key={item.id} item={item} t={t} navigate={navigate} toast={toast} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SubjectLessonRow({ item, t, navigate, toast }) {
+  const latest = item.versions[item.versions.length - 1];
+  const planTitle = latest?.plan?.title || t.lessonId;
+  const usedBy = item.usedBy || [];
+  const classes = item.knownClasses || (item.lesson?.class && item.lesson.class !== '—' ? [item.lesson.class] : []);
+
+  function handleAddClass() {
+    const cls = prompt(t.classPromptForLesson);
+    if (cls && cls.trim()) planStore.addClassToLesson(item.id, cls.trim());
+  }
+
+  function handleToggle(cls) {
+    planStore.toggleClassUsage(item.id, cls);
+  }
+
+  function handleDelete() {
+    if (confirm(t.deleteLessonConfirm)) planStore.deleteLesson(item.id);
+  }
+
+  function handleClearUsed() {
+    planStore.clearUsed(item.id);
+  }
+
+  return (
+    <div style={{
+      padding: '12px 16px',
+      borderTop: '0.5px solid var(--border-subtle)',
+      display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 6 }}>
+          <span style={{ fontWeight: 500, fontSize: 14 }}>{planTitle}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 600, background: 'var(--bg-secondary)',
+            color: 'var(--text-secondary)', padding: '1px 6px', borderRadius: 3,
+          }}>v{latest?.v} · {item.versions.length} {t.versions.toLowerCase()}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            {t.savedAt} {new Date(latest.savedAt).toLocaleDateString()}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {classes.length === 0 ? (
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+              {t.notUsedYet}
+            </span>
+          ) : classes.map(cls => {
+            const isUsed = usedBy.includes(cls);
+            return (
+              <button
+                key={cls}
+                onClick={() => handleToggle(cls)}
+                title={isUsed ? `${t.markedUsedBy} ${cls}` : cls}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px', fontSize: 12, fontWeight: 500,
+                  borderRadius: 11,
+                  border: '0.5px solid ' + (isUsed ? 'var(--border-subtle)' : '#639922'),
+                  background: isUsed ? 'var(--bg-secondary)' : 'var(--bg-success)',
+                  color: isUsed ? 'var(--text-tertiary)' : 'var(--text-success)',
+                  textDecoration: isUsed ? 'line-through' : 'none',
+                  opacity: isUsed ? 0.55 : 1,
+                }}
+              >
+                <span style={{
+                  display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                  background: isUsed ? 'var(--text-tertiary)' : '#639922',
+                }} />
+                {cls}
+              </button>
+            );
+          })}
+          <button onClick={handleAddClass} style={{
+            padding: '3px 9px', fontSize: 12,
+            background: 'transparent', color: 'var(--text-secondary)',
+            border: '0.5px dashed var(--border-default)', borderRadius: 11,
+          }}>{t.addClass}</button>
+          {usedBy.length > 0 && (
+            <button onClick={handleClearUsed} title={t.clearUsed} style={{
+              padding: '3px 9px', fontSize: 11,
+              background: 'transparent', color: 'var(--text-tertiary)',
+              border: 'none',
+            }}>↺</button>
+          )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <button onClick={() => navigate(`/plan/${item.id}`)} style={ghostBtn({ padding: '5px 10px', fontSize: 12 })}>
+          {t.openFullPage} →
+        </button>
+        <button onClick={handleDelete} title={t.deleteLesson} style={ghostBtn({ padding: '5px 8px', fontSize: 12, color: 'var(--text-danger)' })}>
+          ✕
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1174,11 +1727,16 @@ function DiffCol({ title, items, tone }) {
 }
 
 // ============================================================
-// Full page (printable, shareable)
+// Full page (printable, shareable) — now with version tabs
 // ============================================================
 function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
   const [sendDialog, setSendDialog] = useState(false);
+  const [viewingVersion, setViewingVersion] = useState(null);
+  useStoreVersion();
+
   const stored = planStore.get(lessonId);
+  const versions = planStore.getAllVersions(lessonId);
+
   if (!stored) {
     return (
       <Shell t={t} lang={lang} setLang={setLang}>
@@ -1193,7 +1751,12 @@ function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
       </Shell>
     );
   }
-  const { plan, lesson } = stored;
+
+  const lesson = stored.lesson;
+  const displayedPlan = viewingVersion != null
+    ? versions.find(v => v.v === viewingVersion)?.plan
+    : stored.plan;
+
   return (
     <Shell t={t} lang={lang} setLang={setLang}>
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8, flexWrap: 'wrap' }}>
@@ -1204,6 +1767,17 @@ function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
         </div>
       </div>
 
+      {versions.length > 1 && (
+        <div className="no-print" style={{ marginBottom: 12 }}>
+          <VersionTabs
+            versions={versions}
+            activeV={viewingVersion ?? versions[versions.length - 1].v}
+            onSelect={(v) => setViewingVersion(v)}
+            t={t}
+          />
+        </div>
+      )}
+
       <div style={{
         background: 'var(--bg-surface)', border: '0.5px solid var(--border-subtle)',
         borderRadius: 'var(--radius-lg)', padding: '22px 26px',
@@ -1211,12 +1785,12 @@ function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           {t.fullPageTitle} · {lesson.class} · {lesson.subject} · {lesson.time}
         </div>
-        <PlanView plan={plan} t={t} />
+        <PlanView plan={displayedPlan} t={t} />
       </div>
 
       {sendDialog && (
         <SendDialog
-          plan={plan} lesson={lesson} lessonId={lessonId}
+          plan={displayedPlan} lesson={lesson} lessonId={lessonId}
           onClose={() => setSendDialog(false)}
           t={t} lang={lang}
         />
@@ -1229,6 +1803,7 @@ function FullPagePlan({ lessonId, t, lang, setLang, navigate }) {
 // Substitute view (mobile-optimized read-only)
 // ============================================================
 function SubView({ lessonId, t, lang, setLang, navigate }) {
+  useStoreVersion();
   const stored = planStore.get(lessonId);
   if (!stored) {
     return (
@@ -1362,11 +1937,10 @@ function ExtraTimeCard({ et, t }) {
 }
 
 // ============================================================
-// SendDialog — replaces the simple "send to substitute" alert.
-// Four options: email text, SMS text, link only, integrated send.
+// SendDialog — unchanged
 // ============================================================
 function SendDialog({ plan, lesson, lessonId, onClose, t, lang }) {
-  const [preview, setPreview] = useState(null); // null | 'email' | 'sms' | 'link'
+  const [preview, setPreview] = useState(null);
   const [copied, setCopied] = useState(false);
 
   const previews = useMemo(() => ({
@@ -1415,22 +1989,10 @@ function SendDialog({ plan, lesson, lessonId, onClose, t, lang }) {
 
         {!preview && (
           <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <SendOption
-              icon="✉️" title={t.sendOptEmail} desc={t.sendOptEmailDesc}
-              onClick={() => copy('email')}
-            />
-            <SendOption
-              icon="💬" title={t.sendOptSms} desc={t.sendOptSmsDesc}
-              onClick={() => copy('sms')}
-            />
-            <SendOption
-              icon="🔗" title={t.sendOptLink} desc={t.sendOptLinkDesc}
-              onClick={() => copy('link')}
-            />
-            <SendOption
-              icon="📤" title={t.sendOptIntegrated} desc={t.sendOptIntegratedDesc}
-              onClick={null} disabled
-            />
+            <SendOption icon="✉️" title={t.sendOptEmail} desc={t.sendOptEmailDesc} onClick={() => copy('email')} />
+            <SendOption icon="💬" title={t.sendOptSms} desc={t.sendOptSmsDesc} onClick={() => copy('sms')} />
+            <SendOption icon="🔗" title={t.sendOptLink} desc={t.sendOptLinkDesc} onClick={() => copy('link')} />
+            <SendOption icon="📤" title={t.sendOptIntegrated} desc={t.sendOptIntegratedDesc} onClick={null} disabled />
           </div>
         )}
 
@@ -1482,16 +2044,12 @@ function SendOption({ icon, title, desc, onClick, disabled }) {
   );
 }
 
-
-// In production these would come from a small server-side util,
-// but they're pure functions so they live happily in the frontend too.
 // ============================================================
 function buildLink(lessonId) {
   return `${location.origin}${location.pathname}#/sub/${lessonId}`;
 }
 
 function formatLessonDate(lesson) {
-  // In production, use the real lesson date. For the mockup we hardcode "today".
   const d = new Date();
   const days = ['söndag','måndag','tisdag','onsdag','torsdag','fredag','lördag'];
   const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
@@ -1505,9 +2063,7 @@ function buildEmailText(plan, lesson, lessonId, t, lang) {
 
   lines.push(`${t.emailGreeting},`);
   lines.push('');
-  lines.push(isSv
-    ? 'Du har lektion idag:'
-    : 'You have a lesson today:');
+  lines.push(isSv ? 'Du har lektion idag:' : 'You have a lesson today:');
   lines.push(`📅 ${formatLessonDate(lesson)}`);
   lines.push(`📍 ${lesson.class}, ${lesson.room}`);
   lines.push(`📚 ${lesson.subject} — ${plan.title}`);
@@ -1549,7 +2105,6 @@ function buildSmsText(plan, lesson, lessonId, t, lang) {
     : `Hi! You have a lesson tomorrow:\n${lesson.class} ${lesson.subject} ${lesson.time} (${lesson.room}).\nLesson plan: ${link}\n/ ${t.coordinatorName}`;
 }
 
-// Legacy helper kept for the "Copy" button in the modal — exports the plan as bare text.
 function plainText(plan) {
   const lines = [];
   lines.push(plan.title);
