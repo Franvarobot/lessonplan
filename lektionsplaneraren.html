@@ -277,6 +277,19 @@ const LANG = {
     versionSuffix: "version",
     savedAtLabel: "Sparad",
     autoSavedHint: "Auto-sparad som",
+    // Markdown export labels
+    mdTitle: "Lektionsplanering",
+    mdStage: "Stadium",
+    mdGrade: "Årskurs",
+    mdSubject: "Ämne",
+    mdTopic: "Tema",
+    mdDuration: "Lektionslängd",
+    mdSubTag: "Vikarielektion",
+    mdLearningGoal: "Lärandemål",
+    mdCurriculumLink: "Läroplanskoppling",
+    mdAssessment: "Bedömning",
+    mdSubTip: "Tips",
+    optionLabel: "Alternativ",
   },
   en: {
     title: "Lesson Planner",
@@ -388,8 +401,53 @@ const LANG = {
     versionSuffix: "version",
     savedAtLabel: "Saved",
     autoSavedHint: "Auto-saved as",
+    // Markdown export labels
+    mdTitle: "Lesson plan",
+    mdStage: "Stage",
+    mdGrade: "Grade",
+    mdSubject: "Subject",
+    mdTopic: "Topic",
+    mdDuration: "Lesson length",
+    mdSubTag: "Substitute lesson",
+    mdLearningGoal: "Learning goal",
+    mdCurriculumLink: "Curriculum link",
+    mdAssessment: "Assessment",
+    mdSubTip: "Tip",
+    optionLabel: "Option",
   },
 };
+
+// ============================================================
+// asLine — defensively coerce LLM-returned items (string OR object)
+// into a renderable string. Prevents React error #31 when models
+// return shapes like {studentSays, teacherResponse} instead of a
+// plain string in arrays such as anticipatedResponses, teacherDoes,
+// studentsDo, teacherScript, stod, utmaning, etc.
+// ============================================================
+function asLine(item) {
+  if (item == null) return "";
+  if (typeof item === "string") return item;
+  if (typeof item === "number" || typeof item === "boolean") return String(item);
+  if (typeof item === "object") {
+    // Common shapes we've seen from the LLM
+    if ("studentSays" in item && "teacherResponse" in item) {
+      return `${item.studentSays} → ${item.teacherResponse}`;
+    }
+    if ("student" in item && "teacher" in item) {
+      return `${item.student} → ${item.teacher}`;
+    }
+    if ("text" in item && typeof item.text === "string") return item.text;
+    if ("description" in item && typeof item.description === "string") {
+      return item.title ? `${item.title}: ${item.description}` : item.description;
+    }
+    if ("title" in item && typeof item.title === "string") return item.title;
+    // Fallback: join all string-y values
+    const strs = Object.values(item).filter(v => typeof v === "string");
+    if (strs.length) return strs.join(" — ");
+    try { return JSON.stringify(item); } catch { return "[object]"; }
+  }
+  return String(item);
+}
 
 // ============================================================
 // API CALLERS
@@ -802,6 +860,26 @@ function Select({ children, ...props }) {
   );
 }
 
+function LangToggle({ value, onChange }) {
+  const btn = (code, label) => ({
+    padding: "5px 11px", fontSize: 12, fontWeight: 600,
+    background: value === code ? "var(--accent)" : "transparent",
+    color: value === code ? "#fff" : "var(--text-secondary)",
+    border: "none", cursor: "pointer",
+  });
+  return (
+    <div style={{
+      display: "inline-flex",
+      border: "1px solid var(--border-default)",
+      borderRadius: "var(--radius-md)",
+      overflow: "hidden",
+    }}>
+      <button onClick={() => onChange("sv")} style={btn("sv", "SV")}>SV</button>
+      <button onClick={() => onChange("en")} style={btn("en", "EN")}>EN</button>
+    </div>
+  );
+}
+
 // ============================================================
 // SETTINGS MODAL
 // ============================================================
@@ -1210,7 +1288,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
             <div style={{ background: "#F0F7F2", borderRadius: "var(--radius-md)", padding: "10px 12px" }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{t.successCriteria}</div>
               <ul style={{ fontSize: 12, lineHeight: 1.5, listStyle: "none", display: "flex", flexDirection: "column", gap: 3 }}>
-                {lesson.successCriteria.map((c, i) => <li key={i} style={{ display: "flex", gap: 4 }}><span style={{ color: "var(--success-text)" }}>✓</span><span>{c}</span></li>)}
+                {lesson.successCriteria.map((c, i) => <li key={i} style={{ display: "flex", gap: 4 }}><span style={{ color: "var(--success-text)" }}>✓</span><span>{asLine(c)}</span></li>)}
               </ul>
             </div>
           )}
@@ -1239,7 +1317,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
               {(lesson.materialsNeeded || lesson.materials || []).map((m, i) => (
                 <li key={i} style={{ display: "flex", gap: 6 }}>
                   <span style={{ color: "var(--text-tertiary)" }}>·</span>
-                  <span>{m}</span>
+                  <span>{asLine(m)}</span>
                 </li>
               ))}
             </ul>
@@ -1281,7 +1359,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
                           {phase.teacherDoes.map((s, j) => (
                             <li key={j} style={{ display: "flex", gap: 6 }}>
                               <span style={{ color: "var(--accent)", flexShrink: 0 }}>→</span>
-                              <span>{s}</span>
+                              <span>{asLine(s)}</span>
                             </li>
                           ))}
                         </ul>
@@ -1296,7 +1374,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
                           {phase.studentsDo.map((s, j) => (
                             <li key={j} style={{ display: "flex", gap: 6 }}>
                               <span style={{ color: "var(--text-tertiary)", flexShrink: 0 }}>·</span>
-                              <span>{s}</span>
+                              <span>{asLine(s)}</span>
                             </li>
                           ))}
                         </ul>
@@ -1312,7 +1390,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
                       </div>
                       <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 5, fontStyle: "italic", color: "var(--text-primary)" }}>
                         {phase.teacherScript.map((s, j) => (
-                          <li key={j}>"{s.replace(/^["']|["']$/g, "")}"</li>
+                          <li key={j}>"{asLine(s).replace(/^["']|["']$/g, "")}"</li>
                         ))}
                       </ul>
                     </div>
@@ -1328,7 +1406,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
                         {phase.anticipatedResponses.map((s, j) => (
                           <li key={j} style={{ display: "flex", gap: 6 }}>
                             <span style={{ color: "#6B3E8E", flexShrink: 0 }}>·</span>
-                            <span>{s}</span>
+                            <span>{asLine(s)}</span>
                           </li>
                         ))}
                       </ul>
@@ -1344,7 +1422,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
         {!lesson.phases && lesson.activities && (
           <Section icon="layers" label={t.activities}>
             <ol style={{ fontSize: 13, lineHeight: 1.6, paddingLeft: 18 }}>
-              {lesson.activities.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}
+              {lesson.activities.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{asLine(a)}</li>)}
             </ol>
           </Section>
         )}
@@ -1464,7 +1542,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
                     🤝 {t.differentiationStod}
                   </div>
                   <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
-                    {lesson.differentiation.stod.map((s, i) => <li key={i}>· {s}</li>)}
+                    {lesson.differentiation.stod.map((s, i) => <li key={i}>· {asLine(s)}</li>)}
                   </ul>
                 </div>
               )}
@@ -1474,7 +1552,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
                     ⚡ {t.differentiationUtmaning}
                   </div>
                   <ul style={{ fontSize: 13, lineHeight: 1.55, listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
-                    {lesson.differentiation.utmaning.map((s, i) => <li key={i}>· {s}</li>)}
+                    {lesson.differentiation.utmaning.map((s, i) => <li key={i}>· {asLine(s)}</li>)}
                   </ul>
                 </div>
               )}
@@ -1524,7 +1602,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
         {lesson.commonPitfalls && lesson.commonPitfalls.length > 0 && (
           <Section icon="alert" label={t.commonPitfalls}>
             <ul style={{ fontSize: 13, lineHeight: 1.6, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
-              {lesson.commonPitfalls.map((p, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span style={{ color: "var(--warning-text)" }}>⚠</span><span>{p}</span></li>)}
+              {lesson.commonPitfalls.map((p, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span style={{ color: "var(--warning-text)" }}>⚠</span><span>{asLine(p)}</span></li>)}
             </ul>
           </Section>
         )}
@@ -1533,7 +1611,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
         {lesson.classroomManagement && lesson.classroomManagement.length > 0 && (
           <Section icon="users" label={t.classroomManagement}>
             <ul style={{ fontSize: 13, lineHeight: 1.6, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
-              {lesson.classroomManagement.map((p, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span style={{ color: "var(--text-tertiary)" }}>·</span><span>{p}</span></li>)}
+              {lesson.classroomManagement.map((p, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span style={{ color: "var(--text-tertiary)" }}>·</span><span>{asLine(p)}</span></li>)}
             </ul>
           </Section>
         )}
@@ -1545,7 +1623,7 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
               💡 {lesson.isSub ? t.vikarieNotesTitle : t.teacherNotes}
             </div>
             <ul style={{ fontSize: 13, lineHeight: 1.55, color: "var(--warning-text)", listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
-              {(lesson.teacherNotes || lesson.vikarieNotes).map((n, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span>·</span><span>{n}</span></li>)}
+              {(lesson.teacherNotes || lesson.vikarieNotes).map((n, i) => <li key={i} style={{ display: "flex", gap: 6 }}><span>·</span><span>{asLine(n)}</span></li>)}
             </ul>
           </div>
         )}
@@ -1745,77 +1823,77 @@ function App() {
   const exportMd = () => {
     const lessons = [acceptedLesson, subLesson].filter(Boolean);
     const lines = [
-      `# Lektionsplanering`, ``,
-      `**Stadium:** ${stage}  `,
-      `**Årskurs:** ${grade}  `,
-      `**Ämne:** ${subject}  `,
-      `**Tema:** ${topic}  `,
-      `**Lektionslängd:** ${duration} min  `,
+      `# ${t.mdTitle}`, ``,
+      `**${t.mdStage}:** ${stage}  `,
+      `**${t.mdGrade}:** ${grade}  `,
+      `**${t.mdSubject}:** ${subject}  `,
+      `**${t.mdTopic}:** ${topic}  `,
+      `**${t.mdDuration}:** ${duration} min  `,
       ``, `---`, ``,
     ];
     lessons.forEach((l) => {
-      lines.push(`## ${l.title}${l.isSub ? " 🟡 (Vikarielektion)" : ""}`);
+      lines.push(`## ${l.title}${l.isSub ? ` 🟡 (${t.mdSubTag})` : ""}`);
       lines.push(`*${l.approach}*`, ``);
       if (l.summary) lines.push(`${l.summary}`, ``);
-      if (l.learningGoal || l.objective) lines.push(`**Lärandemål:** ${l.learningGoal || l.objective}`);
-      if (l.lgr22_connection) lines.push(`**Läroplanskoppling:** ${l.lgr22_connection}`);
+      if (l.learningGoal || l.objective) lines.push(`**${t.mdLearningGoal}:** ${l.learningGoal || l.objective}`);
+      if (l.lgr22_connection) lines.push(`**${t.mdCurriculumLink}:** ${l.lgr22_connection}`);
       lines.push(``);
 
       if (l.materialsNeeded || l.materials) {
-        lines.push(`### Material`);
-        (l.materialsNeeded || l.materials || []).forEach((m) => lines.push(`- ${m}`));
+        lines.push(`### ${t.materials}`);
+        (l.materialsNeeded || l.materials || []).forEach((m) => lines.push(`- ${asLine(m)}`));
         lines.push(``);
       }
 
       if (l.phases && l.phases.length) {
-        lines.push(`### Lektionsförlopp`);
+        lines.push(`### ${t.phases}`);
         l.phases.forEach((p, i) => {
           lines.push(`#### ${i + 1}. ${p.name} (${p.minutes} min)`);
           if (p.teacherDoes && p.teacherDoes.length) {
-            lines.push(`**Läraren / vikarien:**`);
-            p.teacherDoes.forEach((s) => lines.push(`- ${s}`));
+            lines.push(`**${t.teacherDoes}:**`);
+            p.teacherDoes.forEach((s) => lines.push(`- ${asLine(s)}`));
           }
           if (p.studentsDo && p.studentsDo.length) {
-            lines.push(`**Eleverna:**`);
-            p.studentsDo.forEach((s) => lines.push(`- ${s}`));
+            lines.push(`**${t.studentsDo}:**`);
+            p.studentsDo.forEach((s) => lines.push(`- ${asLine(s)}`));
           }
           lines.push(``);
         });
       } else if (l.activities) {
-        lines.push(`### Lektionsmoment`);
-        l.activities.forEach((a) => lines.push(`- ${a}`));
+        lines.push(`### ${t.activities}`);
+        l.activities.forEach((a) => lines.push(`- ${asLine(a)}`));
         lines.push(``);
       }
 
       if (l.exitExercise) {
-        lines.push(`### Avslutningsövning (${l.exitExercise.durationMinutes} min)`);
+        lines.push(`### ${t.exitExerciseTitle} (${l.exitExercise.durationMinutes} min)`);
         lines.push(`**${l.exitExercise.title}**`);
         lines.push(l.exitExercise.description, ``);
       }
 
       if (l.differentiation && typeof l.differentiation === "object") {
-        lines.push(`### Anpassning`);
+        lines.push(`### ${t.differentiationTitle}`);
         if (l.differentiation.stod) {
-          lines.push(`**Stöd:**`);
-          l.differentiation.stod.forEach((s) => lines.push(`- ${s}`));
+          lines.push(`**${t.differentiationStod}:**`);
+          l.differentiation.stod.forEach((s) => lines.push(`- ${asLine(s)}`));
         }
         if (l.differentiation.utmaning) {
-          lines.push(`**Utmaning:**`);
-          l.differentiation.utmaning.forEach((s) => lines.push(`- ${s}`));
+          lines.push(`**${t.differentiationUtmaning}:**`);
+          l.differentiation.utmaning.forEach((s) => lines.push(`- ${asLine(s)}`));
         }
         lines.push(``);
       } else if (typeof l.differentiation === "string") {
-        lines.push(`**Anpassning:** ${l.differentiation}`, ``);
+        lines.push(`**${t.differentiationTitle}:** ${l.differentiation}`, ``);
       }
 
       if (l.extraActivities && l.extraActivities.length) {
-        lines.push(`### Extra för snabba elever`);
+        lines.push(`### ${t.extraActivitiesTitle}`);
         l.extraActivities.forEach((a) => lines.push(`- **${a.title}** — ${a.description}`));
         lines.push(``);
       }
 
       if (l.extraTime && l.extraTime.length) {
-        lines.push(`### Om tid blir över`);
+        lines.push(`### ${t.extraTimeTitle}`);
         l.extraTime.sort((a,b) => a.minutes - b.minutes).forEach((tier) => {
           lines.push(`- **+${tier.minutes} min · ${tier.title}** — ${tier.description} (${tier.linkBack})`);
         });
@@ -1823,20 +1901,21 @@ function App() {
       }
 
       if (l.vikarieNotes && l.vikarieNotes.length) {
-        lines.push(`### Tips till vikarien`);
-        l.vikarieNotes.forEach((n) => lines.push(`- ${n}`));
+        lines.push(`### ${t.vikarieNotesTitle}`);
+        l.vikarieNotes.forEach((n) => lines.push(`- ${asLine(n)}`));
         lines.push(``);
       }
 
-      if (l.assessment) lines.push(`**Bedömning:** ${l.assessment}`);
-      if (l.subTip) lines.push(`**Tips:** ${l.subTip}`);
+      if (l.assessment) lines.push(`**${t.mdAssessment}:** ${l.assessment}`);
+      if (l.subTip) lines.push(`**${t.mdSubTip}:** ${l.subTip}`);
       lines.push(``, `---`, ``);
     });
     const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `lektion-${subject}-${grade}.md`.replace(/\s+/g, "-").replace(/\//g, "-");
+    const filePrefix = config.language === "sv" ? "lektion" : "lesson";
+    a.download = `${filePrefix}-${subject}-${grade}.md`.replace(/\s+/g, "-").replace(/\//g, "-");
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1858,13 +1937,14 @@ function App() {
               <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>{t.subtitle}</p>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
               <Icon name="key" size={12} />
-              <span>{config.provider === "gemini" ? "Gemini" : config.provider === "anthropic" ? "Anthropic" : "Lokal"}</span>
+              <span>{config.provider === "gemini" ? "Gemini" : config.provider === "anthropic" ? "Anthropic" : (config.language === "sv" ? "Lokal" : "Local")}</span>
               {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
               {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
             </div>
+            <LangToggle value={config.language} onChange={(lng) => saveConfig({ ...config, language: lng })} />
             <Button variant="secondary" icon={<Icon name="settings" size={14} />} onClick={() => setShowSettings(true)}>
               {t.apiSettings}
             </Button>
@@ -2007,7 +2087,7 @@ function App() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {pending.options.map((opt, idx) => (
-                <LessonCard key={opt._id} lesson={opt} t={t} isOption optionLabel={`Alternativ ${String.fromCharCode(65 + idx)}`} onPick={() => acceptLesson(opt)} />
+                <LessonCard key={opt._id} lesson={opt} t={t} isOption optionLabel={`${t.optionLabel} ${String.fromCharCode(65 + idx)}`} onPick={() => acceptLesson(opt)} />
               ))}
             </div>
           </div>
