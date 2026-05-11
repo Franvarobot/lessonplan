@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Lektionsplaneraren</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232B5F8B'/%3E%3Cpath fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M14 18h14a6 6 0 0 1 6 6v24a4 4 0 0 0-4-4H14zM50 18H36a6 6 0 0 0-6 6v24a4 4 0 0 1 4-4h16z'/%3E%3C/svg%3E" />
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
@@ -62,7 +63,7 @@ const { useState, useEffect, useMemo, useRef } = React;
 // App version (shown in bottom-right corner)
 // Bump this when you ship changes. Patch = small fixes, minor = features.
 // ============================================================
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.5.0";
 
 // ============================================================
 // Lesson library — saved lessons in localStorage, auto-versioned
@@ -151,6 +152,10 @@ function useLibraryVersion() {
 
 // ============================================================
 // LGR22 / Gy22 — STAGES & SUBJECTS
+// Swedish strings remain the canonical keys (used in prompts, library
+// storage, and state). EN_LABELS overrides the display label when the
+// app is in English mode. Adding/changing items: edit the SV side AND
+// add a matching EN_LABELS entry below.
 // ============================================================
 const STAGES = {
   "Lågstadiet": ["Årskurs 1", "Årskurs 2", "Årskurs 3"],
@@ -165,6 +170,90 @@ const SUBJECTS_BY_STAGE = {
   "Högstadiet": ["Svenska", "Svenska som andraspråk", "Matematik", "Engelska", "Moderna språk", "Biologi", "Fysik", "Kemi", "Geografi", "Historia", "Religionskunskap", "Samhällskunskap", "Bild", "Musik", "Idrott och hälsa", "Slöjd", "Teknik", "Hem- och konsumentkunskap"],
   "Gymnasiet": ["Svenska 1", "Svenska 2", "Svenska 3", "Engelska 5", "Engelska 6", "Engelska 7", "Matematik 1a", "Matematik 1b", "Matematik 1c", "Matematik 2a", "Matematik 2b", "Matematik 2c", "Matematik 3b", "Matematik 3c", "Matematik 4", "Matematik 5", "Biologi 1", "Biologi 2", "Fysik 1", "Fysik 2", "Kemi 1", "Kemi 2", "Historia 1a1", "Historia 1b", "Historia 2a", "Religionskunskap 1", "Samhällskunskap 1a1", "Samhällskunskap 1b", "Naturkunskap 1a1", "Naturkunskap 1b", "Idrott och hälsa 1", "Filosofi 1", "Psykologi 1"],
 };
+
+// English display labels for the SV keys above. Any key not present
+// falls back to the SV string (so subject names like "Matematik 1a" can
+// stay verbatim if you want — but most have proper translations here).
+const EN_LABELS = {
+  // Stages
+  "Lågstadiet": "Lower primary (Y1-3)",
+  "Mellanstadiet": "Middle primary (Y4-6)",
+  "Högstadiet": "Lower secondary (Y7-9)",
+  "Gymnasiet": "Upper secondary",
+  // Grades
+  "Årskurs 1": "Year 1",
+  "Årskurs 2": "Year 2",
+  "Årskurs 3": "Year 3",
+  "Årskurs 4": "Year 4",
+  "Årskurs 5": "Year 5",
+  "Årskurs 6": "Year 6",
+  "Årskurs 7": "Year 7",
+  "Årskurs 8": "Year 8",
+  "Årskurs 9": "Year 9",
+  "Gymnasiet år 1": "Upper sec. Year 1",
+  "Gymnasiet år 2": "Upper sec. Year 2",
+  "Gymnasiet år 3": "Upper sec. Year 3",
+  // Compulsory-school subjects
+  "Svenska": "Swedish",
+  "Svenska som andraspråk": "Swedish as a second language",
+  "Matematik": "Mathematics",
+  "Engelska": "English",
+  "NO (Naturorienterande ämnen)": "Science (combined)",
+  "SO (Samhällsorienterande ämnen)": "Social studies (combined)",
+  "Biologi": "Biology",
+  "Fysik": "Physics",
+  "Kemi": "Chemistry",
+  "Geografi": "Geography",
+  "Historia": "History",
+  "Religionskunskap": "Religious studies",
+  "Samhällskunskap": "Civics",
+  "Bild": "Art",
+  "Musik": "Music",
+  "Idrott och hälsa": "PE and health",
+  "Slöjd": "Crafts (Slöjd)",
+  "Teknik": "Technology",
+  "Hem- och konsumentkunskap": "Home economics",
+  "Moderna språk": "Modern languages",
+  // Upper secondary subjects
+  "Svenska 1": "Swedish 1",
+  "Svenska 2": "Swedish 2",
+  "Svenska 3": "Swedish 3",
+  "Engelska 5": "English 5",
+  "Engelska 6": "English 6",
+  "Engelska 7": "English 7",
+  "Matematik 1a": "Mathematics 1a",
+  "Matematik 1b": "Mathematics 1b",
+  "Matematik 1c": "Mathematics 1c",
+  "Matematik 2a": "Mathematics 2a",
+  "Matematik 2b": "Mathematics 2b",
+  "Matematik 2c": "Mathematics 2c",
+  "Matematik 3b": "Mathematics 3b",
+  "Matematik 3c": "Mathematics 3c",
+  "Matematik 4": "Mathematics 4",
+  "Matematik 5": "Mathematics 5",
+  "Biologi 1": "Biology 1",
+  "Biologi 2": "Biology 2",
+  "Fysik 1": "Physics 1",
+  "Fysik 2": "Physics 2",
+  "Kemi 1": "Chemistry 1",
+  "Kemi 2": "Chemistry 2",
+  "Historia 1a1": "History 1a1",
+  "Historia 1b": "History 1b",
+  "Historia 2a": "History 2a",
+  "Religionskunskap 1": "Religious studies 1",
+  "Samhällskunskap 1a1": "Civics 1a1",
+  "Samhällskunskap 1b": "Civics 1b",
+  "Naturkunskap 1a1": "Natural science 1a1",
+  "Naturkunskap 1b": "Natural science 1b",
+  "Idrott och hälsa 1": "PE and health 1",
+  "Filosofi 1": "Philosophy 1",
+  "Psykologi 1": "Psychology 1",
+};
+
+function localizeLabel(swedishKey, language) {
+  if (language !== "en") return swedishKey;
+  return EN_LABELS[swedishKey] || swedishKey;
+}
 
 const LANG = {
   sv: {
@@ -257,7 +346,7 @@ const LANG = {
     close: "Stäng",
     lessonsCount: "lektion",
     lessonsCountPlural: "lektioner",
-    print_warning: "OBS: detta är en demo. Lektionsinnehållet genereras av AI och bör granskas av lärare innan användning.",
+    print_warning: "OBS: lektionsinnehållet genereras av AI och bör granskas av lärare innan användning.",
     // Versioning + Library
     versionBadge: "Version",
     savedLessons: "Sparade lektioner",
@@ -338,6 +427,10 @@ const LANG = {
     cardFront: "Framsida",
     cardBack: "Baksida",
     cardExample: "Exempel",
+    optionalSuffix: "(valfritt)",
+    leaveBlankPlaceholder: "(lämna tomt om inte krävs)",
+    createStandaloneSub: "Skapa vikarielektion",
+    createStandaloneSubHint: "Generera en fristående vikarielektion utan att utgå från en sparad lektion. Allt material och alla instruktioner förbereds direkt i planen.",
   },
   en: {
     title: "Lesson Planner",
@@ -429,7 +522,7 @@ const LANG = {
     close: "Close",
     lessonsCount: "lesson",
     lessonsCountPlural: "lessons",
-    print_warning: "NOTE: this is a demo. Lesson content is AI-generated and should be reviewed by a teacher before use.",
+    print_warning: "NOTE: lesson content is AI-generated and should be reviewed by a teacher before use.",
     // Versioning + Library
     versionBadge: "Version",
     savedLessons: "Saved lessons",
@@ -510,6 +603,10 @@ const LANG = {
     cardFront: "Front",
     cardBack: "Back",
     cardExample: "Example",
+    optionalSuffix: "(optional)",
+    leaveBlankPlaceholder: "(leave blank if not needed)",
+    createStandaloneSub: "Create substitute lesson",
+    createStandaloneSubHint: "Generate a standalone substitute lesson without basing it on a saved plan. All materials and instructions are embedded directly in the plan.",
   },
 };
 
@@ -806,7 +903,7 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
   ],
   "commonPitfalls": ["3-5 saker som typiskt går fel i denna typ av lektion och vad läraren gör då (t.ex. 'Om diskussionen tystnar efter 2 minuter: ge ett provocerande motexempel som \\"...\\"')"],
   "teacherNotes": ["3-5 övriga praktiska anmärkningar — klassrumshantering, övergångar, hur man vet att lektionen går bra"],
-  "homework": "konkret hemuppgift om relevant — Skolverkets råd: ska kunna lösas till 90% självständigt; differentiera. Skriv 'Ingen läxa' om inte aktuellt.",
+  "homework": "konkret hemuppgift om relevant — Skolverkets råd: ska kunna lösas till 90% självständigt; differentiera. Skriv 'Ingen läxa' (eller 'No homework' om språket är engelska) om inte aktuellt.",
   "assessment": "hur denna lektion bidrar till bedömningsunderlaget och vad läraren konkret tittar efter"
 }`;
 }
@@ -824,7 +921,14 @@ ELEVERNA HAR PRECIS GÅTT IGENOM (du måste bygga på exakt detta):
 - Lärandemål: ${baseLesson.learningGoal || baseLesson.objective || ""}
 - Förkunskaper de hade: ${baseLesson.priorKnowledge || ""}
 - Vad de gjorde: ${(baseLesson.phases || []).map(p => `${p.name} (${p.minutes}min): ${(p.studentsDo || []).join("; ")}`).join(" | ") || (baseLesson.activities || []).join("; ")}
-- Framgångskriterier från ordinarie lektion: ${(baseLesson.successCriteria || []).join("; ")}` : "";
+- Framgångskriterier från ordinarie lektion: ${(baseLesson.successCriteria || []).join("; ")}` : `
+
+OBS: Detta är en FRISTÅENDE vikarielektion — det finns ingen ordinarie lektion att bygga på. Koordinatorn vet inte exakt vad eleverna senast gjort. Anta vanliga förkunskaper för årskursen och ämnet. Lektionen ska kunna fungera oberoende av vad eleverna gjort förra gången. Den ska ändå vara turnkey för vikarien.`;
+
+  // Standalone mode (no base lesson) needs a slightly different rule #1.
+  const rule1 = baseLesson
+    ? `1. INGA NYA begrepp införs. Lektionen befäster det eleverna redan kan.`
+    : `1. Anta vanliga förkunskaper för årskursen. Lektionen får introducera grundläggande begrepp men de ska FÖRKLARAS ordagrant i planen — vikarien kan inte fylla i kunskapsgapet. Föredra repetition/tillämpning över helt nytt material.`;
 
   return `Du är en svensk förstelärare som planerar en VIKARIELÄKTION enligt ${curriculum}. Detta är en LIVRÄDDNING för en vikarie utan ämneskunskap. Varje detalj måste vara TURNKEY — vikarien öppnar dokumentet, läser och kan undervisa direkt.
 
@@ -834,13 +938,14 @@ KONTEXT:
 - Lektionstid: ${duration} minuter${baseContext}
 
 ABSOLUTA KRAV:
-1. INGA NYA begrepp införs. Lektionen befäster det eleverna redan kan.
+${rule1}
 2. ALLT INNEHÅLL ÄR FÖRBEREDT I PLANEN. Om aktiviteten är "låt eleverna lösa fem tal" — då ska de fem talen finnas i planen, MED FACIT. Om det är "diskutera tre frågor" — då ska de tre frågorna finnas, med exempel-svar att lyssna efter. Om det är "läs en kort text" — då ska texten finnas (skriv den själv, max 200 ord).
 3. SKRIPT FÖR VIKARIEN — varje fas har "teacherScript" med EXAKTA formuleringar i citattecken som vikarien kan säga ordagrant.
 4. ANTICIPERADE SVAR — vad eleverna sannolikt säger och hur vikarien bemöter det, inklusive felsvar.
 5. INGEN VAGT SPRÅK. Aldrig "diskutera ämnet" — alltid "ställ frågan: '...'. Lyssna efter svar som nämner X, Y eller Z."
 6. Roligt och engagerande (lek, station, tävling, kreativt projekt, quiz, samarbete) men pedagogiskt värdefullt.
 7. Bara material som rimligen finns i klassrummet (papper, pennor, tavla, ev. surfplattor).
+8. EXTRA-AKTIVITETER om tid blir över — minst 2 stycken, fullt utskrivna med tydliga instruktioner och facit. Vikarien ska aldrig stå tom.
 
 🚫 ABSOLUT FÖRBJUDET — FANTOMREFERENSER 🚫
 EXTRA viktigt för en vikarie utan ämneskunskap. Du får ALDRIG referera till något som inte finns konkret i planen.
@@ -1532,8 +1637,8 @@ function SettingsModal({ config, onSave, onClose, t }) {
               <Field label={t.model}>
                 <Input value={draft.localModel} onChange={(e) => update("localModel", e.target.value)} placeholder="local-model" />
               </Field>
-              <Field label={`${t.apiKey} (valfritt)`}>
-                <Input type="password" value={draft.localKey} onChange={(e) => update("localKey", e.target.value)} placeholder="(lämna tomt om inte krävs)" />
+              <Field label={`${t.apiKey} ${t.optionalSuffix}`}>
+                <Input type="password" value={draft.localKey} onChange={(e) => update("localKey", e.target.value)} placeholder={t.leaveBlankPlaceholder} />
               </Field>
             </>
           )}
@@ -2513,6 +2618,31 @@ function App() {
 
   useEffect(() => { setGrade(""); setSubject(""); setTopicSuggestions([]); }, [stage]);
   useEffect(() => { setTopicSuggestions([]); }, [grade, subject]);
+  // Clear suggestions when language toggles — stale chips in the wrong language look broken.
+  useEffect(() => { setTopicSuggestions([]); }, [config.language]);
+
+  // When the language toggles, regenerate the current lesson in the new language
+  // and clear any cached extras (they're language-bound and would look mixed).
+  // We use a ref to a callable so this effect doesn't need generateLesson in its closure;
+  // and we skip the very first render so loading the app with a saved language doesn't fire a generation.
+  const regenRef = useRef(null);
+  const firstLangRender = useRef(true);
+  useEffect(() => {
+    if (firstLangRender.current) {
+      firstLangRender.current = false;
+      return;
+    }
+    // Clear extras cache + loading flags + active tab — they're tied to the previous-language lesson id.
+    setExtrasCache({});
+    setLoadingExtras({});
+    setActiveTab({});
+    // Regenerate only if there's currently a lesson to retranslate. Use the same type
+    // (standalone sub vs. main lesson) as the current one.
+    if (acceptedLesson && regenRef.current) {
+      regenRef.current(acceptedLesson.isSub);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.language]);
 
   const hasKey = useMemo(() => {
     if (config.provider === "gemini") return !!config.geminiKey;
@@ -2573,6 +2703,10 @@ function App() {
       setLoadingChoices(false);
     }
   };
+  // Keep the regen ref pointing at a dispatcher so the language-change effect
+  // can invoke either generateLesson or generateSub({standalone:true}) without
+  // a closure dependency on either.
+  regenRef.current = (wasSub) => wasSub ? generateSub({ standalone: true }) : generateLesson();
 
   // Generate one extra. Safe to call multiple times — caches by (lessonId, kind).
   const generateExtra = async (lesson, kind) => {
@@ -2607,18 +2741,43 @@ function App() {
     setShowLibrary(false);
   };
 
-  const generateSub = async () => {
-    if (!acceptedLesson || !hasKey) return;
-    setError(""); setLoadingSub(true);
+  // Generate a substitute lesson. If acceptedLesson exists, builds on top of it
+  // (attached follow-up under the main lesson). If not, generates a standalone
+  // substitute lesson and shows it as the main accepted lesson. The standalone
+  // path is what a coordinator uses when there's no saved plan yet.
+  const generateSub = async ({ standalone = false } = {}) => {
+    if (!hasKey) return;
+    if (!standalone && !acceptedLesson) return;
+    if (standalone && !canGenerate) return;
+    setError("");
+    setLoadingSub(true);
+    if (standalone) { setLoadingChoices(true); setAcceptedLesson(null); setSubLesson(null); }
     try {
       const result = await runLLM(config,
-        subPrompt({ stage, grade, subject, topic, duration, baseLesson: acceptedLesson, language: config.language })
+        subPrompt({
+          stage, grade, subject, topic, duration,
+          baseLesson: standalone ? null : acceptedLesson,
+          language: config.language,
+        })
       );
-      setSubLesson({ ...result, id: `sub-${Date.now()}`, isSub: true });
+      if (standalone) {
+        // Treat standalone sub like any other lesson — save with versioning, show as accepted.
+        const lessonId = `sub-${Date.now()}`;
+        const v = lessonLibrary.add({
+          stage, grade, subject, topic, duration,
+          lesson: { ...result, isSub: true },
+        });
+        const accepted = { ...result, id: lessonId, isSub: true, version: v };
+        setAcceptedLesson(accepted);
+        setActiveTab(tabs => ({ ...tabs, [accepted.id]: "plan" }));
+      } else {
+        setSubLesson({ ...result, id: `sub-${Date.now()}`, isSub: true });
+      }
     } catch (e) {
       setError(`${t.error}: ${e.message}`);
     } finally {
       setLoadingSub(false);
+      if (standalone) setLoadingChoices(false);
     }
   };
 
@@ -2787,19 +2946,19 @@ function App() {
             <Field label={t.stage}>
               <Select value={stage} onChange={(e) => setStage(e.target.value)}>
                 <option value="">{t.chooseStage}</option>
-                {Object.keys(STAGES).map((s) => <option key={s} value={s}>{s}</option>)}
+                {Object.keys(STAGES).map((s) => <option key={s} value={s}>{localizeLabel(s, config.language)}</option>)}
               </Select>
             </Field>
             <Field label={t.grade}>
               <Select value={grade} onChange={(e) => setGrade(e.target.value)} disabled={!stage}>
                 <option value="">{stage ? t.chooseGrade : t.chooseStageFirst}</option>
-                {grades.map((g) => <option key={g} value={g}>{g}</option>)}
+                {grades.map((g) => <option key={g} value={g}>{localizeLabel(g, config.language)}</option>)}
               </Select>
             </Field>
             <Field label={t.subject}>
               <Select value={subject} onChange={(e) => setSubject(e.target.value)} disabled={!stage}>
                 <option value="">{stage ? t.chooseSubject : t.chooseStageFirst}</option>
-                {subjects.map((s) => <option key={s} value={s}>{s}</option>)}
+                {subjects.map((s) => <option key={s} value={s}>{localizeLabel(s, config.language)}</option>)}
               </Select>
             </Field>
             <Field label={t.duration}>
@@ -2875,12 +3034,17 @@ function App() {
             />
           </div>
 
-          <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             {acceptedLesson && (
               <Button variant="secondary" icon={<Icon name="refresh" size={14} />} onClick={reset}>{t.reset}</Button>
             )}
+            <Button variant="yellow" icon={loadingSub ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="coffee" size={14} />}
+              onClick={() => generateSub({ standalone: true })} disabled={!canGenerate || loadingChoices || loadingSub}
+              title={t.createStandaloneSubHint}>
+              {loadingSub ? t.creating : t.createStandaloneSub}
+            </Button>
             <Button variant="primary" icon={loadingChoices ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="sparkles" size={14} />}
-              onClick={generateLesson} disabled={!canGenerate || loadingChoices}>
+              onClick={generateLesson} disabled={!canGenerate || loadingChoices || loadingSub}>
               {loadingChoices ? t.generating : t.generateChoices}
             </Button>
           </div>
