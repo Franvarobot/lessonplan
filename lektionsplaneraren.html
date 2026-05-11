@@ -59,6 +59,97 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 // ============================================================
+// App version (shown in bottom-right corner)
+// Bump this when you ship changes. Patch = small fixes, minor = features.
+// ============================================================
+const APP_VERSION = "1.1.0";
+
+// ============================================================
+// Lesson library — saved lessons in localStorage, auto-versioned
+// by (stage, grade, subject, topic). Same parameters → v2, v3…
+// ============================================================
+const LIBRARY_KEY = "lektionsplaneraren-library-v1";
+
+function libraryKeyFor({ stage, grade, subject, topic }) {
+  return [stage, grade, subject, (topic || "").trim().toLowerCase()].join("|");
+}
+
+function loadLibrary() {
+  try {
+    const raw = localStorage.getItem(LIBRARY_KEY);
+    if (!raw) return { schema: 1, items: {} };
+    const parsed = JSON.parse(raw);
+    return parsed?.items ? parsed : { schema: 1, items: {} };
+  } catch {
+    return { schema: 1, items: {} };
+  }
+}
+
+function saveLibrary(data) {
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(data));
+    window.dispatchEvent(new Event("lp-library-change"));
+  } catch (e) {
+    console.error("Library save failed", e);
+  }
+}
+
+const lessonLibrary = {
+  // Append a version. Returns the new version number.
+  add({ stage, grade, subject, topic, duration, lesson }) {
+    const data = loadLibrary();
+    const key = libraryKeyFor({ stage, grade, subject, topic });
+    const entry = data.items[key] || {
+      stage, grade, subject, topic, duration,
+      versions: [],
+    };
+    const nextV = (entry.versions[entry.versions.length - 1]?.v || 0) + 1;
+    entry.versions.push({
+      v: nextV,
+      savedAt: Date.now(),
+      lesson,
+      duration,
+    });
+    data.items[key] = entry;
+    saveLibrary(data);
+    return nextV;
+  },
+  getEntry({ stage, grade, subject, topic }) {
+    return loadLibrary().items[libraryKeyFor({ stage, grade, subject, topic })];
+  },
+  getAll() {
+    const data = loadLibrary();
+    return Object.entries(data.items).map(([key, entry]) => ({ key, ...entry }));
+  },
+  remove(key) {
+    const data = loadLibrary();
+    delete data.items[key];
+    saveLibrary(data);
+  },
+  exportAll() { return loadLibrary(); },
+  importAll(payload) {
+    if (!payload || typeof payload !== "object" || !payload.items) return false;
+    saveLibrary({ schema: 1, items: payload.items });
+    return true;
+  },
+};
+
+// Hook: rerender when library changes (same tab or cross-tab).
+function useLibraryVersion() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setTick(t => t + 1);
+    window.addEventListener("lp-library-change", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("lp-library-change", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  return tick;
+}
+
+// ============================================================
 // LGR22 / Gy22 — STAGES & SUBJECTS
 // ============================================================
 const STAGES = {
@@ -167,6 +258,25 @@ const LANG = {
     lessonsCount: "lektion",
     lessonsCountPlural: "lektioner",
     print_warning: "OBS: detta är en demo. Lektionsinnehållet genereras av AI och bör granskas av lärare innan användning.",
+    // Versioning + Library
+    versionBadge: "Version",
+    savedLessons: "Sparade lektioner",
+    savedLessonsTitle: "Sparade lektioner",
+    savedLessonsDesc: "Auto-sparade när du valt en lektion. Samma ämne + tema = v2, v3 osv.",
+    noSavedLessons: "Inga sparade lektioner än.",
+    loadVersion: "Ladda",
+    deleteVersionGroup: "Radera alla versioner",
+    deleteVersionGroupConfirm: "Radera alla versioner av denna lektion?",
+    importLibrary: "Importera",
+    exportLibrary: "Exportera",
+    importConfirm: "Detta ersätter dina sparade lektioner. Fortsätt?",
+    importDone: "Importerat",
+    importInvalid: "Ogiltig fil",
+    exportDone: "Exporterat",
+    versionsSuffix: "versioner",
+    versionSuffix: "version",
+    savedAtLabel: "Sparad",
+    autoSavedHint: "Auto-sparad som",
   },
   en: {
     title: "Lesson Planner",
@@ -259,6 +369,25 @@ const LANG = {
     lessonsCount: "lesson",
     lessonsCountPlural: "lessons",
     print_warning: "NOTE: this is a demo. Lesson content is AI-generated and should be reviewed by a teacher before use.",
+    // Versioning + Library
+    versionBadge: "Version",
+    savedLessons: "Saved lessons",
+    savedLessonsTitle: "Saved lessons",
+    savedLessonsDesc: "Auto-saved when you accept a lesson. Same subject + topic = v2, v3 etc.",
+    noSavedLessons: "No saved lessons yet.",
+    loadVersion: "Load",
+    deleteVersionGroup: "Delete all versions",
+    deleteVersionGroupConfirm: "Delete all versions of this lesson?",
+    importLibrary: "Import",
+    exportLibrary: "Export",
+    importConfirm: "This will replace your saved lessons. Continue?",
+    importDone: "Imported",
+    importInvalid: "Invalid file",
+    exportDone: "Exported",
+    versionsSuffix: "versions",
+    versionSuffix: "version",
+    savedAtLabel: "Saved",
+    autoSavedHint: "Auto-saved as",
   },
 };
 
@@ -676,6 +805,223 @@ function Select({ children, ...props }) {
 // ============================================================
 // SETTINGS MODAL
 // ============================================================
+function LibraryModal({ onClose, onLoad, t }) {
+  useLibraryVersion();
+  const items = lessonLibrary.getAll().sort((a, b) => {
+    const aT = a.versions[a.versions.length - 1]?.savedAt || 0;
+    const bT = b.versions[b.versions.length - 1]?.savedAt || 0;
+    return bT - aT;
+  });
+  const fileRef = useRef(null);
+  const [toast, setToast] = useState("");
+
+  function showToast(m) { setToast(m); setTimeout(() => setToast(""), 1600); }
+
+  function handleExport() {
+    const payload = lessonLibrary.exportAll();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lektionsbibliotek-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(t.exportDone);
+  }
+
+  function handleImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (!confirm(t.importConfirm)) { e.target.value = ""; return; }
+        const ok = lessonLibrary.importAll(parsed);
+        showToast(ok ? t.importDone : t.importInvalid);
+      } catch { showToast(t.importInvalid); }
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  }
+
+  function handleDelete(key) {
+    if (!confirm(t.deleteVersionGroupConfirm)) return;
+    lessonLibrary.remove(key);
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      padding: "40px 16px", zIndex: 50, overflowY: "auto",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--bg-surface)", borderRadius: "var(--radius-lg)",
+        maxWidth: 720, width: "100%", maxHeight: "90vh", overflow: "auto",
+        boxShadow: "var(--shadow-md)",
+      }}>
+        <div style={{
+          padding: "16px 22px", borderBottom: "1px solid var(--border-subtle)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12, flexWrap: "wrap",
+        }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{t.savedLessonsTitle}</h2>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{t.savedLessonsDesc}</p>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleExport} style={smallBtn}>↓ {t.exportLibrary}</button>
+            <button onClick={() => fileRef.current?.click()} style={smallBtn}>↑ {t.importLibrary}</button>
+            <button onClick={onClose} style={smallBtn}>✕</button>
+            <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleImport} style={{ display: "none" }} />
+          </div>
+        </div>
+
+        <div style={{ padding: "12px 22px 22px" }}>
+          {items.length === 0 ? (
+            <div style={{
+              padding: 40, textAlign: "center", color: "var(--text-tertiary)",
+              fontSize: 13, border: "1px dashed var(--border-default)",
+              borderRadius: "var(--radius-md)",
+            }}>
+              {t.noSavedLessons}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {items.map(entry => (
+                <LibraryEntry
+                  key={entry.key}
+                  entry={entry}
+                  t={t}
+                  onLoad={(ver) => onLoad({ entry, ver })}
+                  onDelete={() => handleDelete(entry.key)}
+                />
+              ))}
+            </div>
+          )}
+          {toast && (
+            <div style={{
+              marginTop: 12, padding: "6px 12px",
+              background: "var(--accent-bg)", color: "var(--accent)",
+              borderRadius: "var(--radius-sm)", fontSize: 12, textAlign: "center",
+            }}>{toast}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const smallBtn = {
+  padding: "5px 10px", fontSize: 12,
+  background: "transparent", color: "var(--text-secondary)",
+  border: "1px solid var(--border-default)",
+  borderRadius: "var(--radius-sm)", cursor: "pointer",
+};
+
+function LibraryEntry({ entry, t, onLoad, onDelete }) {
+  const latest = entry.versions[entry.versions.length - 1];
+  return (
+    <div style={{
+      border: "1px solid var(--border-subtle)",
+      borderRadius: "var(--radius-md)",
+      padding: "12px 14px",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
+            {latest?.lesson?.title || entry.topic}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+            {entry.stage} · {entry.grade} · {entry.subject} · {entry.topic || "—"}
+          </div>
+        </div>
+        <button onClick={onDelete} title={t.deleteVersionGroup} style={{
+          ...smallBtn, color: "var(--warning-text)", padding: "4px 8px",
+        }}>✕</button>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {entry.versions.map(ver => (
+          <button
+            key={ver.v}
+            onClick={() => onLoad(ver)}
+            title={`${t.savedAtLabel} ${new Date(ver.savedAt).toLocaleString()}`}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "4px 10px", fontSize: 12, fontWeight: 500,
+              background: "var(--bg-secondary)", color: "var(--text-primary)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: 12, cursor: "pointer",
+            }}
+          >
+            v{ver.v}
+            <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontWeight: 400 }}>
+              · {new Date(ver.savedAt).toLocaleDateString()}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SavedCountInline() {
+  useLibraryVersion();
+  const total = lessonLibrary.getAll().reduce((sum, e) => sum + e.versions.length, 0);
+  if (total === 0) return null;
+  return (
+    <span style={{
+      marginLeft: 6, fontSize: 11, fontWeight: 600,
+      background: "var(--accent-bg)", color: "var(--accent)",
+      padding: "1px 7px", borderRadius: 10,
+    }}>{total}</span>
+  );
+}
+
+function VersionBadge({ providerLabel, savedCount, onOpenLibrary }) {
+  return (
+    <div className="no-print" style={{
+      position: "fixed", bottom: 10, right: 10, zIndex: 40,
+      display: "flex", alignItems: "center", gap: 6,
+      pointerEvents: "auto",
+    }}>
+      {savedCount > 0 && (
+        <button onClick={onOpenLibrary} style={{
+          fontSize: 10, fontWeight: 500,
+          padding: "3px 8px",
+          background: "var(--bg-surface)",
+          color: "var(--text-secondary)",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: 10, cursor: "pointer",
+          opacity: 0.7,
+          transition: "opacity 0.15s",
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
+        onMouseLeave={(e) => e.currentTarget.style.opacity = "0.7"}
+        title="Sparade lektioner / Saved lessons"
+        >
+          {savedCount} ✓
+        </button>
+      )}
+      <span style={{
+        fontSize: 10, fontWeight: 500,
+        padding: "3px 8px",
+        background: "var(--bg-surface)",
+        color: "var(--text-tertiary)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: 10,
+        opacity: 0.55,
+        userSelect: "none",
+      }}
+      title={providerLabel}
+      >
+        v{APP_VERSION}
+      </span>
+    </div>
+  );
+}
+
 function SettingsModal({ config, onSave, onClose, t }) {
   const [draft, setDraft] = useState(config);
   const update = (k, v) => setDraft({ ...draft, [k]: v });
@@ -789,7 +1135,7 @@ function SettingsModal({ config, onSave, onClose, t }) {
 // ============================================================
 // LESSON CARD
 // ============================================================
-function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
+function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
   // For options (preview cards) we show a compact preview; for the accepted lesson we show everything.
   const compact = isOption;
   const accent = lesson.isSub ? "#E8C547" : "var(--accent)";
@@ -821,6 +1167,17 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel }) {
             <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               {lesson.approach}
             </span>
+            {version != null && (
+              <span title={`${t.versionBadge} ${version}`} style={{
+                fontSize: 10, fontWeight: 600,
+                color: "var(--text-tertiary)",
+                background: "var(--bg-secondary)",
+                padding: "1px 7px", borderRadius: 10,
+                letterSpacing: "0.02em",
+              }}>
+                v{version}
+              </span>
+            )}
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{lesson.title}</h3>
           <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{lesson.summary}</p>
@@ -1257,6 +1614,7 @@ function App() {
     language: "sv",
   });
   const [showSettings, setShowSettings] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [stage, setStage] = useState("");
   const [grade, setGrade] = useState("");
   const [subject, setSubject] = useState("");
@@ -1339,9 +1697,27 @@ function App() {
   };
 
   const acceptLesson = (opt) => {
-    setAcceptedLesson({ ...opt, id: opt._id, isSub: false });
+    const v = lessonLibrary.add({
+      stage, grade, subject, topic, duration,
+      lesson: opt,
+    });
+    setAcceptedLesson({ ...opt, id: opt._id, isSub: false, version: v });
     setPending(null);
     setSubLesson(null);
+  };
+
+  // Load a previously saved version without re-saving. Sets up the form
+  // so further "Generate" calls continue versioning the same group.
+  const loadLessonFromLibrary = ({ entry, ver }) => {
+    setStage(entry.stage);
+    setGrade(entry.grade);
+    setSubject(entry.subject);
+    setTopic(entry.topic);
+    if (entry.duration) setDuration(entry.duration);
+    setAcceptedLesson({ ...ver.lesson, id: `loaded-${Date.now()}`, isSub: false, version: ver.v });
+    setPending(null);
+    setSubLesson(null);
+    setShowLibrary(false);
   };
 
   const generateSub = async () => {
@@ -1468,6 +1844,7 @@ function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {showSettings && <SettingsModal config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} t={t} />}
+      {showLibrary && <LibraryModal onClose={() => setShowLibrary(false)} onLoad={loadLessonFromLibrary} t={t} />}
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "32px 20px 80px" }}>
         {/* HEADER */}
@@ -1490,6 +1867,9 @@ function App() {
             </div>
             <Button variant="secondary" icon={<Icon name="settings" size={14} />} onClick={() => setShowSettings(true)}>
               {t.apiSettings}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowLibrary(true)} title={t.savedLessons}>
+              {t.savedLessons} <SavedCountInline />
             </Button>
           </div>
         </header>
@@ -1644,7 +2024,7 @@ function App() {
                 <Button variant="ghost" icon={<Icon name="download" size={13} />} onClick={exportMd}>{t.download}</Button>
               </div>
             </div>
-            <LessonCard lesson={acceptedLesson} t={t} />
+            <LessonCard lesson={acceptedLesson} t={t} version={acceptedLesson.version} />
 
             {!subLesson && (
               <div className="no-print" style={{ marginTop: 14, padding: 16, background: "var(--bg-secondary)", border: "1px dashed var(--border-default)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -1685,8 +2065,16 @@ function App() {
           {t.print_warning}
         </div>
       </div>
+
+      <AppVersionBadgeMount providerLabel={config.provider === "gemini" ? "Gemini" : config.provider === "anthropic" ? "Anthropic" : "Local"} onOpenLibrary={() => setShowLibrary(true)} />
     </div>
   );
+}
+
+function AppVersionBadgeMount({ providerLabel, onOpenLibrary }) {
+  useLibraryVersion();
+  const savedCount = lessonLibrary.getAll().reduce((sum, e) => sum + e.versions.length, 0);
+  return <VersionBadge providerLabel={providerLabel} savedCount={savedCount} onOpenLibrary={onOpenLibrary} />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
