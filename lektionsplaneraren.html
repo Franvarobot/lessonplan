@@ -63,7 +63,7 @@ const { useState, useEffect, useMemo, useRef } = React;
 // App version (shown in bottom-right corner)
 // Bump this when you ship changes. Patch = small fixes, minor = features.
 // ============================================================
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.5.1";
 
 // ============================================================
 // Lesson library — saved lessons in localStorage, auto-versioned
@@ -753,8 +753,37 @@ async function runLLM(config, prompt) {
 // ============================================================
 function topicSuggestionsPrompt({ stage, grade, subject, language, exclude = [] }) {
   const isGy = stage === "Gymnasiet";
+  const isEn = language === "en";
+
+  // The whole prompt body must be in the target language. A trailing
+  // "Respond in English" line gets out-prioritized when the rest of the
+  // prompt is in Swedish; the model echoes the dominant language.
+  if (isEn) {
+    const curriculum = isGy ? "Gy22 (the Swedish upper-secondary curriculum, 2022)" : "LGR22 (the Swedish compulsory-school curriculum, 2022)";
+    const excludeText = exclude.length ? `\n\nDo not repeat these (already shown): ${exclude.join(", ")}` : "";
+    const stageLabel = localizeLabel(stage, "en");
+    const gradeLabel = localizeLabel(grade, "en");
+    const subjectLabel = localizeLabel(subject, "en");
+    return `You are a Swedish teacher. Suggest 8 suitable lesson topics/areas aligned with ${curriculum}.
+
+Context:
+- Stage: ${stageLabel}
+- Grade: ${gradeLabel}
+- Subject: ${subjectLabel}
+
+The suggestions should:
+- Be concrete topic/area names (not entire syllabuses), 2-5 words each
+- Mirror the central content of ${curriculum} for this grade and subject
+- Vary in type (e.g. factual area, skill, project idea, current theme)
+- Be realistic to teach in one or a few lessons${excludeText}
+
+IMPORTANT: Write all suggestions in English. Respond with only a valid JSON object, no markdown:
+{
+  "topics": ["suggestion 1", "suggestion 2", "suggestion 3", "suggestion 4", "suggestion 5", "suggestion 6", "suggestion 7", "suggestion 8"]
+}`;
+  }
+
   const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
-  const langInstr = language === "sv" ? "Svara på svenska." : "Respond in English.";
   const excludeText = exclude.length ? `\n\nUndvik dessa förslag (redan visade): ${exclude.join(", ")}` : "";
   return `Du är en svensk lärare. Föreslå 8 lämpliga teman/områden för en lektion enligt ${curriculum}.
 
@@ -769,7 +798,7 @@ Förslagen ska:
 - Variera i typ (t.ex. faktaområde, färdighet, projektidé, aktuellt tema)
 - Vara realistiska att undervisa på en eller några lektioner${excludeText}
 
-${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
+VIKTIGT: Skriv alla förslag på svenska. Svara endast med ett giltigt JSON-objekt, ingen markdown:
 {
   "topics": ["förslag 1", "förslag 2", "förslag 3", "förslag 4", "förslag 5", "förslag 6", "förslag 7", "förslag 8"]
 }`;
@@ -778,9 +807,20 @@ ${langInstr} Svara endast med ett giltigt JSON-objekt, ingen markdown:
 function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, totalBranches, language, detailLevel = "standard" }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
-  const langInstr = language === "sv"
-    ? "VIKTIGT: Skriv allt innehåll i JSON-objektet på svenska."
-    : "IMPORTANT: Write all content inside the JSON object in English.";
+  const isEn = language === "en";
+  // Strong, top-of-prompt language anchor. A trailing instruction gets out-weighted
+  // by the dominant language of the prompt body; placing it first sets the tone.
+  const langPrefix = isEn
+    ? `**LANGUAGE: English.** Every single string value in the JSON response — titles, descriptions, scripts, examples, board content, all of it — MUST be in natural English. The prompt below uses Swedish field labels for technical reasons, but the OUTPUT IS ENGLISH.\n\n`
+    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
+  const langInstr = isEn
+    ? "REMINDER: Write all content inside the JSON object in English."
+    : "VIKTIGT: Skriv allt innehåll i JSON-objektet på svenska.";
+
+  // Localize the stage/grade/subject for the EN case so the prompt body coherent.
+  const stageLabel = isEn ? localizeLabel(stage, "en") : stage;
+  const gradeLabel = isEn ? localizeLabel(grade, "en") : grade;
+  const subjectLabel = isEn ? localizeLabel(subject, "en") : subject;
 
   // Detail-level instructions affect which fields are populated and how verbose each phase is.
   const detailInstr = {
@@ -815,12 +855,12 @@ function lessonPrompt({ stage, grade, subject, topic, duration, branchIndex, tot
       ? `\nVIKTIGT: Lämna BORT classroomManagement helt. anticipatedResponses och teacherScript inkluderas bara där detaljnivåinstruktionen anger.`
       : "";
 
-  return `Du är en svensk förstelärare som planerar en RIKTIG lektion enligt ${curriculum} från Skolverket. Din planering ska följa beprövad pedagogisk forskning (Rosenshine, Hattie, Skolverkets "Strukturerad Undervisning"-modell) och vara så konkret att en lärare kan gå rakt in i klassrummet med planen i handen och hålla en bra lektion.
+  return `${langPrefix}Du är en svensk förstelärare som planerar en RIKTIG lektion enligt ${curriculum} från Skolverket. Din planering ska följa beprövad pedagogisk forskning (Rosenshine, Hattie, Skolverkets "Strukturerad Undervisning"-modell) och vara så konkret att en lärare kan gå rakt in i klassrummet med planen i handen och hålla en bra lektion.
 
 LEKTIONSPARAMETRAR:
-- Stadium: ${stage}
-- Årskurs: ${grade}
-- Ämne: ${subject}
+- Stadium: ${stageLabel}
+- Årskurs: ${gradeLabel}
+- Ämne: ${subjectLabel}
 - Tema/område: "${topic}"
 - Lektionstid: ${duration} minuter
 
@@ -911,9 +951,16 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
 function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22" : "LGR22";
-  const langInstr = language === "sv"
-    ? "VIKTIGT: Skriv allt på svenska."
-    : "IMPORTANT: Write everything in English.";
+  const isEn = language === "en";
+  const langPrefix = isEn
+    ? `**LANGUAGE: English.** Every single string value in the JSON response — titles, descriptions, scripts, board content, anticipated student responses, all of it — MUST be in natural English. The prompt below uses Swedish field labels for technical reasons, but the OUTPUT IS ENGLISH.\n\n`
+    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
+  const langInstr = isEn
+    ? "REMINDER: Write everything in English."
+    : "VIKTIGT: Skriv allt på svenska.";
+  const stageLabel = isEn ? localizeLabel(stage, "en") : stage;
+  const gradeLabel = isEn ? localizeLabel(grade, "en") : grade;
+  const subjectLabel = isEn ? localizeLabel(subject, "en") : subject;
   const baseContext = baseLesson ? `
 
 ELEVERNA HAR PRECIS GÅTT IGENOM (du måste bygga på exakt detta):
@@ -930,10 +977,10 @@ OBS: Detta är en FRISTÅENDE vikarielektion — det finns ingen ordinarie lekti
     ? `1. INGA NYA begrepp införs. Lektionen befäster det eleverna redan kan.`
     : `1. Anta vanliga förkunskaper för årskursen. Lektionen får introducera grundläggande begrepp men de ska FÖRKLARAS ordagrant i planen — vikarien kan inte fylla i kunskapsgapet. Föredra repetition/tillämpning över helt nytt material.`;
 
-  return `Du är en svensk förstelärare som planerar en VIKARIELÄKTION enligt ${curriculum}. Detta är en LIVRÄDDNING för en vikarie utan ämneskunskap. Varje detalj måste vara TURNKEY — vikarien öppnar dokumentet, läser och kan undervisa direkt.
+  return `${langPrefix}Du är en svensk förstelärare som planerar en VIKARIELÄKTION enligt ${curriculum}. Detta är en LIVRÄDDNING för en vikarie utan ämneskunskap. Varje detalj måste vara TURNKEY — vikarien öppnar dokumentet, läser och kan undervisa direkt.
 
 KONTEXT:
-- Stadium: ${stage}, Årskurs: ${grade}, Ämne: ${subject}
+- Stadium: ${stageLabel}, Årskurs: ${gradeLabel}, Ämne: ${subjectLabel}
 - Tema/område: "${topic}"
 - Lektionstid: ${duration} minuter${baseContext}
 
@@ -1049,13 +1096,22 @@ function extrasContextBlock(lesson, language) {
 
 function extrasPrompt({ kind, lesson, stage, grade, subject, topic, duration, language }) {
   const isSv = language === "sv";
-  const langInstr = isSv ? "Svara på svenska." : "Respond in English.";
+  const isEn = !isSv;
+  // Top-of-prompt language anchor. The extras prompts are Swedish-dominated
+  // and without a strong leading instruction the model echoes Swedish output.
+  const langPrefix = isEn
+    ? `**LANGUAGE: English.** Every string value in the JSON response must be in natural English. The prompt below uses Swedish framing for technical reasons, but the OUTPUT IS ENGLISH.\n\n`
+    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
+  const langInstr = isSv ? "Svara på svenska." : "REMINDER: respond in English.";
   const ctx = extrasContextBlock(lesson, language);
-  const meta = `${stage} · ${isSv ? "Årskurs" : "Grade"} ${grade} · ${subject} · "${topic}" · ${duration} min`;
+  const stageLabel = isEn ? localizeLabel(stage, "en") : stage;
+  const gradeLabel = isEn ? localizeLabel(grade, "en") : grade;
+  const subjectLabel = isEn ? localizeLabel(subject, "en") : subject;
+  const meta = `${stageLabel} · ${isSv ? "Årskurs" : "Grade"} ${gradeLabel} · ${subjectLabel} · "${topic}" · ${duration} min`;
   const youngerLearner = (typeof grade === "number" && grade <= 6) || /^F-|^åk ?[1-6]/i.test(String(grade));
 
   const builders = {
-    worksheet: () => `Du genererar ett ARBETSBLAD för eleverna baserat på lektionen nedan.
+    worksheet: () => `${langPrefix}Du genererar ett ARBETSBLAD för eleverna baserat på lektionen nedan.
 
 ${meta}
 ${ctx}
@@ -1077,7 +1133,7 @@ ${langInstr} Svara endast med giltigt JSON, ingen markdown:
   "answerKeyNote": "kort kommentar till läraren om hur facit används (1 mening)"
 }`,
 
-    badges: () => `Du genererar 3-5 belöningsmärken (badges) för denna lektion. ${youngerLearner ? "Eleverna är yngre — använd lekfullt språk, roliga namn, känslor." : "Eleverna är äldre — håll det subtilt, inte barnsligt. Tänk 'expert', 'utforskare', 'analytiker' snarare än 'super-stjärna'."}
+    badges: () => `${langPrefix}Du genererar 3-5 belöningsmärken (badges) för denna lektion. ${youngerLearner ? "Eleverna är yngre — använd lekfullt språk, roliga namn, känslor." : "Eleverna är äldre — håll det subtilt, inte barnsligt. Tänk 'expert', 'utforskare', 'analytiker' snarare än 'super-stjärna'."}
 
 ${meta}
 ${ctx}
@@ -1094,7 +1150,7 @@ ${langInstr} Svara endast med giltigt JSON:
   ]
 }`,
 
-    flashcards: () => `Du genererar en uppsättning ord-/begreppskort (flashcards) baserade på lektionen.
+    flashcards: () => `${langPrefix}Du genererar en uppsättning ord-/begreppskort (flashcards) baserade på lektionen.
 
 ${meta}
 ${ctx}
@@ -1113,7 +1169,7 @@ ${langInstr} Svara endast med giltigt JSON:
   ]
 }`,
 
-    discussionCards: () => `Du genererar diskussionsfrågor som klippkort för grupparbete.
+    discussionCards: () => `${langPrefix}Du genererar diskussionsfrågor som klippkort för grupparbete.
 
 ${meta}
 ${ctx}
@@ -1133,7 +1189,7 @@ ${langInstr} Svara endast med giltigt JSON:
   ]
 }`,
 
-    anchorChart: () => `Du genererar en TAVELPLAN (anchor chart) — exakt vad läraren ritar/skriver på tavlan som referens under hela lektionen.
+    anchorChart: () => `${langPrefix}Du genererar en TAVELPLAN (anchor chart) — exakt vad läraren ritar/skriver på tavlan som referens under hela lektionen.
 
 ${meta}
 ${ctx}
@@ -1154,7 +1210,7 @@ ${langInstr} Svara endast med giltigt JSON:
   "keyTakeaway": "den ENA meningen läraren vill att eleverna minns när de lämnar lektionen"
 }`,
 
-    diagram: () => `Du genererar ett MERMAID-DIAGRAM som visualiserar en central process eller struktur från lektionen.
+    diagram: () => `${langPrefix}Du genererar ett MERMAID-DIAGRAM som visualiserar en central process eller struktur från lektionen.
 
 ${meta}
 ${ctx}
@@ -1174,7 +1230,7 @@ ${langInstr} Svara endast med giltigt JSON:
   "useCase": "när i lektionen läraren visar diagrammet"
 }`,
 
-    imageSearch: () => `Du föreslår BILDSÖKNINGAR för varje fas av lektionen — kuraterade länkar till fria bildkällor.
+    imageSearch: () => `${langPrefix}Du föreslår BILDSÖKNINGAR för varje fas av lektionen — kuraterade länkar till fria bildkällor.
 
 ${meta}
 ${ctx}
