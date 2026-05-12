@@ -1,1 +1,0 @@
-console.log('✅ LessonCard.js loaded');

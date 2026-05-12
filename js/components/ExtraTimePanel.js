@@ -1,1 +1,0 @@
-console.log('✅ ExtraTimePanel.js loaded');
