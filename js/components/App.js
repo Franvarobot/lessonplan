@@ -597,11 +597,22 @@ function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
-              <Icon name="key" size={12} />
-              <span>{window.providerDisplayName(config.provider, config.language)}</span>
-              {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
-              {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
-            </div>
+  <Icon name="key" size={12} />
+  <span>
+    {window.providerDisplayName(config.provider, config.language)}
+    {(() => {
+      const m = config.provider === "gemini" ? config.geminiModel
+              : config.provider === "anthropic" ? config.anthropicModel
+              : config.provider === "openai" ? config.openaiModel
+              : config.provider === "grok" ? config.grokModel
+              : config.provider === "local" ? config.localModel
+              : "";
+      return m ? <span style={{ marginLeft: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>· {m}</span> : null;
+    })()}
+  </span>
+  {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
+  {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
+</div>
             <LangToggle value={config.language} onChange={(lng) => saveConfig({ ...config, language: lng })} />
             {config.schoolName && (
               <button onClick={() => setShowSchoolPicker(true)}
