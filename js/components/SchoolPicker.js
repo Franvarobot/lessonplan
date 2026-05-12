@@ -1,10 +1,10 @@
 // ============================================================
 // SchoolPickerModal — pick existing or create new, with fuzzy-match
 // guard to prevent accidental duplicates.
-// Depends on: Icon.js (Input/Field/smallBtn), helpers.js (similarityRatio),
+// Depends on: Icon.js (Input/Field/Select/smallBtn), helpers.js (similarityRatio),
 //             bankAPI.js (schoolsAPI), storage.js (useSchoolsVersion)
 // ============================================================
-const { useState: useState_school, useMemo: useMemo_school } = React;
+const { useState: useState_school, useMemo: useMemo_school, useEffect: useEffect_school } = React;
 
 window.SchoolPickerModal = function SchoolPickerModal({ onClose, onSelect, onCreate, t, currentSchoolId, requireSelection }) {
   window.useSchoolsVersion();
@@ -14,6 +14,16 @@ window.SchoolPickerModal = function SchoolPickerModal({ onClose, onSelect, onCre
   const [creating, setCreating] = useState_school(false);
   const [confirmAnyway, setConfirmAnyway] = useState_school(false);
   const [error, setError] = useState_school("");
+
+  // Dropdown selection state — defaults to current school, or first school, or empty
+  const [pickedId, setPickedId] = useState_school(
+    currentSchoolId || (schools[0] && schools[0].school_id) || ""
+  );
+
+  // Keep dropdown in sync if schools list changes while modal is open
+  useEffect_school(() => {
+    if (!pickedId && schools[0]) setPickedId(schools[0].school_id);
+  }, [schools.length]);
 
   // Top 3 near-duplicate suggestions for the typed name (similarity >= 0.85).
   const suggestions = useMemo_school(() => {
@@ -30,6 +40,11 @@ window.SchoolPickerModal = function SchoolPickerModal({ onClose, onSelect, onCre
     const q = newName.trim().toLowerCase();
     return schools.find(s => String(s.name || "").trim().toLowerCase() === q);
   }, [newName, schools]);
+
+  function handleChoose() {
+    const found = schools.find(s => s.school_id === pickedId);
+    if (found) onSelect(found);
+  }
 
   async function handleCreate() {
     setError("");
@@ -79,24 +94,24 @@ window.SchoolPickerModal = function SchoolPickerModal({ onClose, onSelect, onCre
                 {t.schoolNoneYet}
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {schools.map(s => {
-                  const active = s.school_id === currentSchoolId;
-                  return (
-                    <button key={s.school_id} onClick={() => onSelect(s)} style={{
-                      textAlign: "left", padding: "10px 12px", fontSize: 13, fontWeight: 500,
-                      background: active ? "var(--accent-bg)" : "var(--bg-surface)",
-                      color: active ? "var(--accent)" : "var(--text-primary)",
-                      border: "1px solid " + (active ? "var(--accent)" : "var(--border-default)"),
-                      borderRadius: "var(--radius-md)", cursor: "pointer",
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                    }}>
-                      <span>{s.name}</span>
-                      {active && <span>✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                <window.Select value={pickedId} onChange={(e) => setPickedId(e.target.value)}>
+                  <option value="">{t.schoolPickPrompt}</option>
+                  {schools.map(s => (
+                    <option key={s.school_id} value={s.school_id}>{s.name}</option>
+                  ))}
+                </window.Select>
+                <button onClick={handleChoose} disabled={!pickedId} style={{
+                  width: "100%", padding: "9px 12px", fontSize: 13, fontWeight: 500,
+                  background: pickedId ? "var(--accent)" : "var(--bg-secondary)",
+                  color: pickedId ? "#fff" : "var(--text-tertiary)",
+                  border: "1px solid " + (pickedId ? "var(--accent)" : "var(--border-default)"),
+                  borderRadius: "var(--radius-md)",
+                  cursor: pickedId ? "pointer" : "not-allowed",
+                }}>
+                  {t.schoolUseExisting || "Use this school"}
+                </button>
+              </>
             )}
             <div style={{ borderTop: "1px dashed var(--border-default)", paddingTop: 10 }}>
               <button onClick={() => { setMode("create"); setError(""); }} style={{
