@@ -199,7 +199,7 @@ function App() {
       const result = await window.runLLM(config,
         window.lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: 0, totalBranches: 1, language: "sv", detailLevel })
       );
-      result.translations = { sv: result };
+      result.translations = { sv: { ...result } };
       const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
       let record;
       try {
@@ -401,7 +401,7 @@ function App() {
         })
       );
       if (standalone) {
-        result.translations = { sv: result };
+        result.translations = { sv: { ...result } };
         const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
         let record;
         try {
