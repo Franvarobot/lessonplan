@@ -18,7 +18,7 @@ window.ACTIVE_POOL_LIMIT = 3;
 
 // Default Apps Script Web App URL (Google Sheets sync). Empty = sync disabled
 // unless the user provides their own URL in Settings.
-window.DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwneZx5Mk4MbdVpXq83yO1rujAWLyw3Nz0YjfffsKX39RmElle4e8kqbs3smTDmd2Zw/exec";
+window.DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDECns-5gAccF-NnzHLoexBQwiCuEXtSQT1z00WEH-x3sFIpWjsuAGdiIuwz48LutN/exec";
 
 // ============================================================
 // LGR22 / Gy22 curriculum — STAGES and SUBJECTS
