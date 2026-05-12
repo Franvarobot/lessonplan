@@ -71,71 +71,152 @@ const APP_VERSION = "1.6.0";
 // ============================================================
 const LIBRARY_KEY = "lektionsplaneraren-library-v1";
 
-function libraryKeyFor({ stage, grade, subject, topic }) {
-  return [stage, grade, subject, (topic || "").trim().toLowerCase()].join("|");
-}
+// Phase 1: default Apps Script Web App URL (Google Sheets sync).
+// Users can override this in Settings; leaving blank = use this default.
+const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwneZx5Mk4MbdVpXq83yO1rujAWLyw3Nz0YjfffsKX39RmElle4e8kqbs3smTDmd2Zw/exec";
 
-function loadLibrary() {
+// Pool key: groups lessons by year-level slot (stage + grade + subject).
+function poolKeyFor({ stage, grade, subject }) {
+  return [stage, grade, subject].join("|");
+}
+const ACTIVE_POOL_LIMIT = 3;
+
+// Phase 3: shared bank cache (mirrors the Apps Script "Bank" sheet).
+// Stored in localStorage so the app works offline / on cold start, then refreshed.
+const BANK_CACHE_KEY = "lektionsplaneraren-bank-cache-v1";
+
+function loadBankCache() {
   try {
-    const raw = localStorage.getItem(LIBRARY_KEY);
-    if (!raw) return { schema: 1, items: {} };
+    const raw = localStorage.getItem(BANK_CACHE_KEY);
+    if (!raw) return { lessons: [], fetchedAt: 0 };
     const parsed = JSON.parse(raw);
-    return parsed?.items ? parsed : { schema: 1, items: {} };
+    return parsed?.lessons ? parsed : { lessons: [], fetchedAt: 0 };
   } catch {
-    return { schema: 1, items: {} };
+    return { lessons: [], fetchedAt: 0 };
   }
 }
 
-function saveLibrary(data) {
+function saveBankCache(data) {
   try {
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(data));
-    window.dispatchEvent(new Event("lp-library-change"));
+    localStorage.setItem(BANK_CACHE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new Event("lp-bank-change"));
   } catch (e) {
-    console.error("Library save failed", e);
+    console.error("Bank cache save failed", e);
   }
 }
 
-const lessonLibrary = {
-  // Append a version. Returns the new version number.
-  add({ stage, grade, subject, topic, duration, lesson }) {
-    const data = loadLibrary();
-    const key = libraryKeyFor({ stage, grade, subject, topic });
-    const entry = data.items[key] || {
-      stage, grade, subject, topic, duration,
-      versions: [],
-    };
-    const nextV = (entry.versions[entry.versions.length - 1]?.v || 0) + 1;
-    entry.versions.push({
-      v: nextV,
-      savedAt: Date.now(),
-      lesson,
-      duration,
+// Apps Script Web App helper. Single endpoint; we POST a typed payload.
+async function postToAppsScript(url, payload) {
+  if (!url) throw new Error("No Apps Script URL configured");
+  // text/plain avoids CORS preflight; Apps Script accepts the raw body.
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Apps Script HTTP ${res.status}`);
+  try { return await res.json(); } catch { return { ok: true }; }
+}
+
+async function getFromAppsScript(url, params = {}) {
+  if (!url) throw new Error("No Apps Script URL configured");
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(qs ? `${url}?${qs}` : url, { method: "GET" });
+  if (!res.ok) throw new Error(`Apps Script HTTP ${res.status}`);
+  return await res.json();
+}
+
+// The bank API. Reads from local cache (synchronous); writes go remote then refresh.
+const bankAPI = {
+  // ---- Read (synchronous, from cache) ----
+  all() { return loadBankCache().lessons; },
+  active() { return this.all().filter(l => l.status === "active"); },
+  byId(id) { return this.all().find(l => l.lesson_id === id) || null; },
+  getActivePool({ stage, grade, subject }) {
+    return this.active().filter(l =>
+      l.stage === stage && String(l.grade) === String(grade) && l.subject === subject
+    );
+  },
+  // Group active by (stage, grade) → list of subjects with their lessons. For BankView.
+  matrixForStage(stage) {
+    const lessons = this.active().filter(l => l.stage === stage);
+    const map = new Map(); // key: `${grade}|${subject}` → [lessons]
+    for (const l of lessons) {
+      const k = `${l.grade}|${l.subject}`;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(l);
+    }
+    return map;
+  },
+  cacheUpsert(lesson) {
+    const cache = loadBankCache();
+    const idx = cache.lessons.findIndex(l => l.lesson_id === lesson.lesson_id);
+    if (idx >= 0) cache.lessons[idx] = lesson;
+    else cache.lessons.push(lesson);
+    saveBankCache(cache);
+  },
+  cacheMarkArchived(id) {
+    const cache = loadBankCache();
+    const rec = cache.lessons.find(l => l.lesson_id === id);
+    if (rec) { rec.status = "archived"; rec.archived_at = new Date().toISOString(); }
+    saveBankCache(cache);
+  },
+  // ---- Remote ----
+  async refresh(url) {
+    const r = await getFromAppsScript(url, { type: "bank" });
+    if (r.ok && Array.isArray(r.lessons)) {
+      saveBankCache({ lessons: r.lessons, fetchedAt: Date.now() });
+      return r.lessons;
+    }
+    throw new Error(r.error || "bank fetch failed");
+  },
+  async addLesson(url, { schoolId, stage, grade, subject, topic, title, duration, lesson }) {
+    const r = await postToAppsScript(url, {
+      type: "newLesson",
+      schoolId, stage, grade, subject, topic, title, duration, lesson,
     });
-    data.items[key] = entry;
-    saveLibrary(data);
-    return nextV;
+    if (!r.ok) {
+      const err = new Error(r.error || "newLesson failed");
+      err.code = r.error;
+      err.activeCount = r.activeCount;
+      throw err;
+    }
+    // Optimistic cache write (refresh will reconcile shortly).
+    const lessonRec = {
+      lesson_id: r.lessonId,
+      created_at: new Date().toISOString(),
+      created_by_school: schoolId,
+      status: "active",
+      stage, grade, subject, topic, title,
+      duration,
+      lesson,
+      archived_at: "",
+    };
+    this.cacheUpsert(lessonRec);
+    return lessonRec;
   },
-  getEntry({ stage, grade, subject, topic }) {
-    return loadLibrary().items[libraryKeyFor({ stage, grade, subject, topic })];
-  },
-  getAll() {
-    const data = loadLibrary();
-    return Object.entries(data.items).map(([key, entry]) => ({ key, ...entry }));
-  },
-  remove(key) {
-    const data = loadLibrary();
-    delete data.items[key];
-    saveLibrary(data);
-  },
-  exportAll() { return loadLibrary(); },
-  importAll(payload) {
-    if (!payload || typeof payload !== "object" || !payload.items) return false;
-    saveLibrary({ schema: 1, items: payload.items });
-    return true;
+  async archive(url, lessonId, schoolId) {
+    await postToAppsScript(url, { type: "archiveLesson", lessonId, schoolId });
+    this.cacheMarkArchived(lessonId);
   },
 };
 
-// Hook: rerender when library changes (same tab or cross-tab).
+// Hook: rerender when bank cache changes.
+function useBankVersion() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setTick(t => t + 1);
+    window.addEventListener("lp-bank-change", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("lp-bank-change", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  return tick;
+}
+
+// Hook: rerender when library changes.
 function useLibraryVersion() {
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -149,6 +230,63 @@ function useLibraryVersion() {
   }, []);
   return tick;
 }
+
+const lessonLibrary = {
+  // Per-school local store: usage log and feedback (keyed by remote lesson_id).
+  // The bank itself lives remote; we don't duplicate it here.
+  _load() {
+    try {
+      const raw = localStorage.getItem(LIBRARY_KEY);
+      if (!raw) return { schema: 3, usage: [], feedback: [] };
+      const parsed = JSON.parse(raw);
+      if (parsed?.schema === 3) return parsed;
+      // Migrate old schemas: drop them (they referred to local-only lessons).
+      // Usage and feedback there used different keys, can't reliably link to new lesson_ids.
+      // We don't want to lose them entirely though — keep raw blob in localStorage under backup key.
+      try { localStorage.setItem(LIBRARY_KEY + "-backup", raw); } catch {}
+      return { schema: 3, usage: [], feedback: [] };
+    } catch {
+      return { schema: 3, usage: [], feedback: [] };
+    }
+  },
+  _save(data) {
+    try {
+      localStorage.setItem(LIBRARY_KEY, JSON.stringify(data));
+      window.dispatchEvent(new Event("lp-library-change"));
+    } catch (e) { console.error("Library save failed", e); }
+  },
+  addUsage({ lessonId, used }) {
+    const data = this._load();
+    data.usage.push({ lessonId, ...used, loggedAt: Date.now() });
+    this._save(data);
+  },
+  addFeedback({ lessonId, feedback }) {
+    const data = this._load();
+    data.feedback.push({ lessonId, ...feedback, at: Date.now() });
+    this._save(data);
+  },
+  getUsageForLesson(lessonId) {
+    return this._load().usage.filter(u => u.lessonId === lessonId);
+  },
+  getFeedbackForLesson(lessonId) {
+    return this._load().feedback.filter(f => f.lessonId === lessonId);
+  },
+  // For BankView "have I used this?" indicator.
+  hasUsed(lessonId) {
+    return this._load().usage.some(u => u.lessonId === lessonId);
+  },
+  allUsage() { return this._load().usage; },
+  allFeedback() { return this._load().feedback; },
+  exportAll() { return this._load(); },
+  importAll(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    if (payload.schema === 3) {
+      this._save({ schema: 3, usage: payload.usage || [], feedback: payload.feedback || [] });
+      return true;
+    }
+    return false;
+  },
+};
 
 // ============================================================
 // LGR22 / Gy22 — STAGES & SUBJECTS
@@ -357,6 +495,61 @@ const LANG = {
     lessonsCount: "lektion",
     lessonsCountPlural: "lektioner",
     print_warning: "OBS: lektionsinnehållet genereras av AI och bör granskas av lärare innan användning.",
+    // Phase 1: context fields + usage + feedback
+    contextHeader: "Lektionskontext",
+    contextOptional: "Valfritt – fylls i om du vill koppla lektionen till en klass/tid",
+    teacher: "Lärare",
+    className: "Klass",
+    day: "Dag",
+    time: "Tid",
+    room: "Sal",
+    substituteName: "Vikariens namn",
+    markUsed: "Markera som genomförd",
+    markedUsed: "Genomförd",
+    usageLog: "Genomförda lektioner",
+    openUsageLog: "Visa kalender",
+    noUsageYet: "Inga genomförda lektioner ännu.",
+    feedbackTitle: "Vikariens återkoppling",
+    feedbackShow: "Visa återkoppling",
+    feedbackHide: "Dölj återkoppling",
+    feedbackPlaceholder: "Skriv kort hur lektionen gick – vad fungerade, vad ska läraren veta?",
+    feedbackSubmit: "Skicka återkoppling",
+    feedbackSending: "Skickar…",
+    feedbackSent: "Återkoppling skickad. Tack!",
+    feedbackEmpty: "Ingen återkoppling ännu.",
+    appsScriptUrlLabel: "Google Apps Script webb-URL",
+    appsScriptUrlHelp: "Valfritt – lämna tom för att använda standard-URL. Egen URL behövs bara om du vill spara till ditt eget Google Sheet.",
+    syncedToSheet: "Sparat i Google Sheet",
+    syncFailedLocal: "Kunde inte spara till Google – sparat lokalt",
+    // Phase 2: pool / archive
+    poolActive: "aktiva",
+    poolArchived: "arkiverade",
+    poolStatus: "Pool",
+    statusActive: "Aktiv",
+    statusArchived: "Arkiverad",
+    poolFullTitle: "Max 3 aktiva lektioner per ämne och årskurs",
+    poolFullDesc: "Du har redan 3 aktiva lektioner för denna kombination. Välj en att öppna, arkivera en, eller markera en som genomförd för att skapa en ny.",
+    archive: "Arkivera",
+    archiveLesson: "Arkivera lektion",
+    archiveAndGenerate: "Arkivera och skapa ny",
+    open: "Öppna",
+    openLesson: "Öppna lektion",
+    deleteLesson: "Radera lektion",
+    deleteLessonConfirm: "Radera denna lektion permanent? Detta kan inte ångras.",
+    usedTimes: "Antal gånger genomförd",
+    poolBadge: "lektioner i pool",
+    // Phase 3: bank
+    bankTitle: "Lektionsbank",
+    bankButton: "Bank",
+    bankDesc: "Delade lektioner per årskurs och ämne. Max 3 aktiva per kombination.",
+    bankLoading: "Hämtar bank…",
+    bankRefresh: "Uppdatera",
+    bankError: "Fel",
+    bankEmpty: "Inga lektioner ännu. Skapa en för att fylla på banken.",
+    bankEmptySlot: "Tomt",
+    alreadyUsedHere: "Använd på din skola",
+    schoolIdLabel: "Skol-ID",
+    schoolIdHelp: "Ett unikt ID för din skola (bokstäver/siffror, inga mellanslag).",
     // Versioning + Library
     versionBadge: "Version",
     savedLessons: "Sparade lektioner",
@@ -569,6 +762,58 @@ const LANG = {
     lessonsCount: "lesson",
     lessonsCountPlural: "lessons",
     print_warning: "NOTE: lesson content is AI-generated and should be reviewed by a teacher before use.",
+    contextHeader: "Lesson context",
+    contextOptional: "Optional – fill in to link this plan to a class/time",
+    teacher: "Teacher",
+    className: "Class",
+    day: "Day",
+    time: "Time",
+    room: "Room",
+    substituteName: "Substitute name",
+    markUsed: "Mark as used",
+    markedUsed: "Used",
+    usageLog: "Used lessons",
+    openUsageLog: "Open calendar",
+    noUsageYet: "No lessons marked as used yet.",
+    feedbackTitle: "Substitute feedback",
+    feedbackShow: "Show feedback",
+    feedbackHide: "Hide feedback",
+    feedbackPlaceholder: "How did the lesson go – what worked, what should the teacher know?",
+    feedbackSubmit: "Send feedback",
+    feedbackSending: "Sending…",
+    feedbackSent: "Feedback sent. Thank you!",
+    feedbackEmpty: "No feedback yet.",
+    appsScriptUrlLabel: "Google Apps Script web URL",
+    appsScriptUrlHelp: "Optional – leave blank to use the default URL. Only needed if you want to save to your own Google Sheet.",
+    syncedToSheet: "Saved to Google Sheet",
+    syncFailedLocal: "Couldn't save to Google – saved locally",
+    poolActive: "active",
+    poolArchived: "archived",
+    poolStatus: "Pool",
+    statusActive: "Active",
+    statusArchived: "Archived",
+    poolFullTitle: "Max 3 active lessons per subject and year",
+    poolFullDesc: "You already have 3 active lessons for this combination. Open one, archive one, or mark one as used to free up a slot for a new lesson.",
+    archive: "Archive",
+    archiveLesson: "Archive lesson",
+    archiveAndGenerate: "Archive and generate new",
+    open: "Open",
+    openLesson: "Open lesson",
+    deleteLesson: "Delete lesson",
+    deleteLessonConfirm: "Delete this lesson permanently? This cannot be undone.",
+    usedTimes: "Times used",
+    poolBadge: "lessons in pool",
+    bankTitle: "Lesson Bank",
+    bankButton: "Bank",
+    bankDesc: "Shared lessons by year and subject. Max 3 active per combination.",
+    bankLoading: "Loading bank…",
+    bankRefresh: "Refresh",
+    bankError: "Error",
+    bankEmpty: "No lessons yet. Generate one to start filling the bank.",
+    bankEmptySlot: "Empty",
+    alreadyUsedHere: "Used at your school",
+    schoolIdLabel: "School ID",
+    schoolIdHelp: "A unique ID for your school (letters/digits, no spaces).",
     // Versioning + Library
     versionBadge: "Version",
     savedLessons: "Saved lessons",
@@ -1573,117 +1818,10 @@ function LangToggle({ value, onChange }) {
   );
 }
 
+
 // ============================================================
-// SETTINGS MODAL
+// BANK VIEW — Year × Subject matrix of active lessons in the shared bank.
 // ============================================================
-function LibraryModal({ onClose, onLoad, t }) {
-  useLibraryVersion();
-  const items = lessonLibrary.getAll().sort((a, b) => {
-    const aT = a.versions[a.versions.length - 1]?.savedAt || 0;
-    const bT = b.versions[b.versions.length - 1]?.savedAt || 0;
-    return bT - aT;
-  });
-  const fileRef = useRef(null);
-  const [toast, setToast] = useState("");
-
-  function showToast(m) { setToast(m); setTimeout(() => setToast(""), 1600); }
-
-  function handleExport() {
-    const payload = lessonLibrary.exportAll();
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `lektionsbibliotek-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(t.exportDone);
-  }
-
-  function handleImport(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const parsed = JSON.parse(ev.target.result);
-        if (!confirm(t.importConfirm)) { e.target.value = ""; return; }
-        const ok = lessonLibrary.importAll(parsed);
-        showToast(ok ? t.importDone : t.importInvalid);
-      } catch { showToast(t.importInvalid); }
-      e.target.value = "";
-    };
-    reader.readAsText(file);
-  }
-
-  function handleDelete(key) {
-    if (!confirm(t.deleteVersionGroupConfirm)) return;
-    lessonLibrary.remove(key);
-  }
-
-  return (
-    <div onClick={onClose} style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-      display: "flex", alignItems: "flex-start", justifyContent: "center",
-      padding: "40px 16px", zIndex: 50, overflowY: "auto",
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: "var(--bg-surface)", borderRadius: "var(--radius-lg)",
-        maxWidth: 720, width: "100%", maxHeight: "90vh", overflow: "auto",
-        boxShadow: "var(--shadow-md)",
-      }}>
-        <div style={{
-          padding: "16px 22px", borderBottom: "1px solid var(--border-subtle)",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 12, flexWrap: "wrap",
-        }}>
-          <div>
-            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{t.savedLessonsTitle}</h2>
-            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{t.savedLessonsDesc}</p>
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={handleExport} style={smallBtn}>↓ {t.exportLibrary}</button>
-            <button onClick={() => fileRef.current?.click()} style={smallBtn}>↑ {t.importLibrary}</button>
-            <button onClick={onClose} style={smallBtn}>✕</button>
-            <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleImport} style={{ display: "none" }} />
-          </div>
-        </div>
-
-        <div style={{ padding: "12px 22px 22px" }}>
-          {items.length === 0 ? (
-            <div style={{
-              padding: 40, textAlign: "center", color: "var(--text-tertiary)",
-              fontSize: 13, border: "1px dashed var(--border-default)",
-              borderRadius: "var(--radius-md)",
-            }}>
-              {t.noSavedLessons}
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {items.map(entry => (
-                <LibraryEntry
-                  key={entry.key}
-                  entry={entry}
-                  t={t}
-                  onLoad={(ver) => onLoad({ entry, ver })}
-                  onDelete={() => handleDelete(entry.key)}
-                />
-              ))}
-            </div>
-          )}
-          {toast && (
-            <div style={{
-              marginTop: 12, padding: "6px 12px",
-              background: "var(--accent-bg)", color: "var(--accent)",
-              borderRadius: "var(--radius-sm)", fontSize: 12, textAlign: "center",
-            }}>{toast}</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const smallBtn = {
   padding: "5px 10px", fontSize: 12,
   background: "transparent", color: "var(--text-secondary)",
@@ -1691,55 +1829,279 @@ const smallBtn = {
   borderRadius: "var(--radius-sm)", cursor: "pointer",
 };
 
-function LibraryEntry({ entry, t, onLoad, onDelete }) {
-  const latest = entry.versions[entry.versions.length - 1];
+function BankView({ onClose, onOpen, onArchive, onRefresh, loading, error, t }) {
+  useBankVersion();
+  const lessons = bankAPI.active();
+
+  // Group: stage → grade → subject → lessons[]
+  const grouped = React.useMemo(() => {
+    const tree = {};
+    for (const l of lessons) {
+      const s = l.stage || "—";
+      const g = l.grade || "—";
+      const sub = l.subject || "—";
+      tree[s] = tree[s] || {};
+      tree[s][g] = tree[s][g] || {};
+      tree[s][g][sub] = tree[s][g][sub] || [];
+      tree[s][g][sub].push(l);
+    }
+    return tree;
+  }, [lessons.length, lessons.map(l => l.lesson_id).join(",")]);
+
+  const [selectedLesson, setSelectedLesson] = useState(null);
+
+  const stages = Object.keys(grouped);
+
   return (
-    <div style={{
-      border: "1px solid var(--border-subtle)",
-      borderRadius: "var(--radius-md)",
-      padding: "12px 14px",
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto",
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
-            {latest?.lesson?.title || entry.topic}
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--bg-surface)", borderRadius: "var(--radius-lg)",
+        maxWidth: 1000, width: "100%", maxHeight: "92vh", overflowY: "auto",
+        padding: 24, position: "relative",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 600 }}>📚 {t.bankTitle}</h2>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{t.bankDesc}</p>
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-            {entry.stage} · {entry.grade} · {entry.subject} · {entry.topic || "—"}
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {loading && <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{t.bankLoading}</span>}
+            <button onClick={onRefresh} style={smallBtn}>↻ {t.bankRefresh}</button>
+            <button onClick={onClose} style={{ ...smallBtn, padding: "5px 9px" }}>✕</button>
           </div>
         </div>
-        <button onClick={onDelete} title={t.deleteVersionGroup} style={{
-          ...smallBtn, color: "var(--warning-text)", padding: "4px 8px",
-        }}>✕</button>
+
+        {error && (
+          <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--warning-bg)", color: "var(--warning-text)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
+            {t.bankError}: {error}
+          </div>
+        )}
+
+        {stages.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--text-tertiary)", fontStyle: "italic" }}>
+            {loading ? t.bankLoading : t.bankEmpty}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+            {stages.map(stage => {
+              const grades = Object.keys(grouped[stage]).sort();
+              return (
+                <div key={stage}>
+                  <div style={{
+                    fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)",
+                    textTransform: "uppercase", letterSpacing: "0.05em",
+                    marginBottom: 8, paddingBottom: 4, borderBottom: "1px solid var(--border-subtle)",
+                  }}>{stage}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {grades.map(grade => {
+                      const subjects = Object.keys(grouped[stage][grade]).sort();
+                      return (
+                        <div key={grade}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
+                            {grade}
+                          </div>
+                          <div style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                            gap: 8,
+                          }}>
+                            {subjects.map(subject => {
+                              const slots = grouped[stage][grade][subject];
+                              return (
+                                <div key={subject} style={{
+                                  border: "1px solid var(--border-subtle)",
+                                  borderRadius: "var(--radius-md)",
+                                  padding: "8px 10px",
+                                  background: "var(--bg-surface)",
+                                }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600 }}>{subject}</div>
+                                    <div style={{ fontSize: 10, fontWeight: 600, color: slots.length >= ACTIVE_POOL_LIMIT ? "var(--warning-text)" : "var(--text-tertiary)" }}>
+                                      {slots.length}/{ACTIVE_POOL_LIMIT}
+                                    </div>
+                                  </div>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                    {Array.from({ length: ACTIVE_POOL_LIMIT }).map((_, i) => {
+                                      const slot = slots[i];
+                                      if (!slot) {
+                                        return (
+                                          <div key={i} style={{
+                                            fontSize: 11, color: "var(--text-tertiary)",
+                                            padding: "5px 8px",
+                                            border: "1px dashed var(--border-default)",
+                                            borderRadius: "var(--radius-sm)",
+                                            fontStyle: "italic",
+                                          }}>{t.bankEmptySlot}</div>
+                                        );
+                                      }
+                                      const used = lessonLibrary.hasUsed(slot.lesson_id);
+                                      return (
+                                        <button key={i} onClick={() => setSelectedLesson(slot)} style={{
+                                          textAlign: "left",
+                                          padding: "5px 8px", fontSize: 11,
+                                          background: used ? "var(--bg-secondary)" : "var(--accent-bg)",
+                                          color: used ? "var(--text-tertiary)" : "var(--accent)",
+                                          border: "1px solid " + (used ? "var(--border-subtle)" : "var(--accent-bg)"),
+                                          borderRadius: "var(--radius-sm)",
+                                          cursor: "pointer", fontWeight: 500,
+                                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                        }} title={slot.lesson?.title || slot.topic}>
+                                          {used ? "✓ " : ""}{slot.lesson?.title || slot.topic || "—"}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {entry.versions.map(ver => (
-          <button
-            key={ver.v}
-            onClick={() => onLoad(ver)}
-            title={`${t.savedAtLabel} ${new Date(ver.savedAt).toLocaleString()}`}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              padding: "4px 10px", fontSize: 12, fontWeight: 500,
-              background: "var(--bg-secondary)", color: "var(--text-primary)",
+
+      {selectedLesson && (
+        <BankLessonDetail lesson={selectedLesson} t={t}
+          alreadyUsed={lessonLibrary.hasUsed(selectedLesson.lesson_id)}
+          onClose={() => setSelectedLesson(null)}
+          onOpen={() => { onOpen(selectedLesson.lesson_id); setSelectedLesson(null); }}
+          onArchive={() => { onArchive(selectedLesson.lesson_id); setSelectedLesson(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BankLessonDetail({ lesson, t, onClose, onOpen, onArchive, alreadyUsed }) {
+  const l = lesson.lesson || {};
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 120,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--bg-surface)", borderRadius: "var(--radius-lg)",
+        maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto",
+        padding: 22,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 8 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600 }}>{l.title || lesson.topic || "—"}</h3>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", fontSize: 18, cursor: "pointer", color: "var(--text-tertiary)" }}>×</button>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10 }}>
+          {lesson.stage} · {lesson.grade} · {lesson.subject} · {lesson.topic || "—"}
+        </div>
+        {l.summary && <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>{l.summary}</p>}
+        {l.learningGoal && (
+          <div style={{ fontSize: 12, padding: "8px 10px", background: "var(--accent-bg)", color: "var(--accent)", borderRadius: "var(--radius-sm)", marginBottom: 10 }}>
+            <strong>{t.objective}:</strong> {l.learningGoal}
+          </div>
+        )}
+        {alreadyUsed && (
+          <div style={{ fontSize: 11, padding: "5px 9px", background: "var(--bg-secondary)", color: "var(--text-tertiary)", borderRadius: "var(--radius-sm)", marginBottom: 10, display: "inline-block" }}>
+            ✓ {t.alreadyUsedHere}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+          <button onClick={onArchive} style={{ ...smallBtn, color: "var(--warning-text)" }}>{t.archive}</button>
+          <button onClick={onOpen} style={{ ...smallBtn, background: "var(--accent)", color: "#fff", borderColor: "var(--accent)" }}>↗ {t.open}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// Phase 2: small chip near generate buttons showing active pool size.
+function PoolIndicator({ stage, grade, subject, t, onOpen }) {
+  useBankVersion();
+  const pool = bankAPI.getActivePool({ stage, grade, subject });
+  const full = pool.length >= ACTIVE_POOL_LIMIT;
+  if (pool.length === 0) return <span />;
+  return (
+    <button onClick={onOpen} title={full ? t.poolFullTitle : ""} style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      padding: "5px 10px", fontSize: 11, fontWeight: 600,
+      background: full ? "var(--warning-bg)" : "var(--bg-secondary)",
+      color: full ? "var(--warning-text)" : "var(--text-secondary)",
+      border: "1px solid " + (full ? "var(--warning-border)" : "var(--border-default)"),
+      borderRadius: 999, cursor: "pointer",
+    }}>
+      <span style={{ fontSize: 13 }}>📚</span>
+      {pool.length}/{ACTIVE_POOL_LIMIT} {t.poolBadge}
+    </button>
+  );
+}
+
+// Phase 2: shown when user tries to generate but the pool (stage|grade|subject)
+// already has ACTIVE_POOL_LIMIT active lessons. Offers Open / Archive on each.
+function PoolFullModal({ stage, grade, subject, onClose, onOpen, onArchiveAndGenerate, t }) {
+  useBankVersion();
+  const pool = React.useMemo(() => bankAPI.getActivePool({ stage, grade, subject }), [stage, grade, subject]);
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 110,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "var(--bg-surface)", borderRadius: "var(--radius-lg)",
+        maxWidth: 600, width: "100%", maxHeight: "85vh", overflowY: "auto",
+        padding: 24, position: "relative",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 600 }}>⚠ {t.poolFullTitle}</h2>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", fontSize: 20, cursor: "pointer", color: "var(--text-tertiary)" }}>×</button>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.5 }}>
+          {t.poolFullDesc}
+        </p>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 8, fontWeight: 600 }}>
+          {stage} · {grade} · {subject}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {pool.map(rec => (
+            <div key={rec.lesson_id} style={{
               border: "1px solid var(--border-subtle)",
-              borderRadius: 12, cursor: "pointer",
-            }}
-          >
-            v{ver.v}
-            <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontWeight: 400 }}>
-              · {new Date(ver.savedAt).toLocaleDateString()}
-            </span>
-          </button>
-        ))}
+              borderRadius: "var(--radius-md)",
+              padding: "10px 12px",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+            }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                  {rec.lesson?.title || rec.topic || "—"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                  {rec.topic || "—"} · {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button onClick={() => onOpen(rec.lesson_id)} style={smallBtn}>↗ {t.open}</button>
+                <button onClick={() => onArchiveAndGenerate(rec.lesson_id)} style={{
+                  ...smallBtn,
+                  background: "var(--accent)", color: "#fff", borderColor: "var(--accent)",
+                }} title={t.archiveAndGenerate}>📦 {t.archive}</button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
 function SavedCountInline() {
-  useLibraryVersion();
-  const total = lessonLibrary.getAll().reduce((sum, e) => sum + e.versions.length, 0);
+  useBankVersion();
+  const total = bankAPI.active().length;
   if (total === 0) return null;
   return (
     <span style={{
@@ -1942,6 +2304,20 @@ function SettingsModal({ config, onSave, onClose, t }) {
               </Field>
             </>
           )}
+
+          {/* Phase 1: Apps Script web app URL (Google Sheets sync) */}
+          <div style={{ borderTop: "1px dashed var(--border-default)", paddingTop: 14, marginTop: 4 }}>
+            <Field label={t.appsScriptUrlLabel} hint={t.appsScriptUrlHelp}>
+              <Input value={draft.appsScriptUrl || ""} onChange={(e) => update("appsScriptUrl", e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec" />
+            </Field>
+            <div style={{ marginTop: 10 }}>
+              <Field label={t.schoolIdLabel} hint={t.schoolIdHelp}>
+                <Input value={draft.schoolId || ""} onChange={(e) => update("schoolId", e.target.value)}
+                  placeholder="school-1" />
+              </Field>
+            </div>
+          </div>
 
           <div style={{ fontSize: 12, color: "var(--text-tertiary)", padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-md)" }}>
             🔒 {t.keyHelp}
@@ -2315,7 +2691,7 @@ const miniToggle = (active) => ({
 // ============================================================
 // LESSON CARD WITH TABS — wraps the plan and the extras tabs
 // ============================================================
-function LessonCardWithTabs({ lesson, t, extrasEnabled, extrasCache, loadingExtras, onGenerateExtra, onForceRegenerate, activeTab, setActiveTab }) {
+function LessonCardWithTabs({ lesson, t, extrasEnabled, extrasCache, loadingExtras, onGenerateExtra, onForceRegenerate, activeTab, setActiveTab, onMarkUsed, onSubmitFeedback }) {
   const tabs = [
     { key: "plan",            label: t.tabPlan,            icon: "book",   alwaysShow: true },
     { key: "worksheet",       label: t.tabWorksheet,       icon: "file" },
@@ -2379,7 +2755,7 @@ function LessonCardWithTabs({ lesson, t, extrasEnabled, extrasCache, loadingExtr
       </div>
 
       {/* Tab content */}
-      {activeTab === "plan" && <LessonCard lesson={lesson} t={t} version={lesson.version} />}
+      {activeTab === "plan" && <LessonCard lesson={lesson} t={t} onMarkUsed={onMarkUsed} onSubmitFeedback={onSubmitFeedback} />}
       {activeTab === "worksheet" && <WorksheetTab data={data} loading={loading} onGenerate={() => onForceRegenerate("worksheet")} t={t} />}
       {activeTab === "anchorChart" && <AnchorChartTab data={data} loading={loading} onGenerate={() => onForceRegenerate("anchorChart")} t={t} />}
       {activeTab === "badges" && <BadgesTab data={data} loading={loading} onGenerate={() => onForceRegenerate("badges")} t={t} />}
@@ -2394,11 +2770,50 @@ function LessonCardWithTabs({ lesson, t, extrasEnabled, extrasCache, loadingExtr
 // ============================================================
 // LESSON CARD
 // ============================================================
-function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
+function LessonCard({ lesson, t, onPick, isOption, optionLabel, onMarkUsed, onSubmitFeedback }) {
   // For options (preview cards) we show a compact preview; for the accepted lesson we show everything.
   const compact = isOption;
   const accent = lesson.isSub ? "#E8C547" : "var(--accent)";
   const totalMin = lesson.phases ? lesson.phases.reduce((s, p) => s + (p.minutes || 0), 0) : null;
+  const ctx = lesson.ctx || {};
+  const hasCtx = ctx.teacher || ctx.className || ctx.day || ctx.time || ctx.room;
+  // Read existing feedback from library for this lesson (rerenders when library changes via _libTick).
+  const existingFeedback = React.useMemo(() => {
+    if (!lesson.id) return [];
+    return lessonLibrary.getFeedbackForLesson(lesson.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson.id, lesson._libTick]);
+
+  const [markedUsedFlash, setMarkedUsedFlash] = React.useState(false);
+  const [marking, setMarking] = React.useState(false);
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  const [fbSubName, setFbSubName] = React.useState("");
+  const [fbText, setFbText] = React.useState("");
+  const [fbState, setFbState] = React.useState({ sending: false, sent: false, synced: null });
+
+  const handleMarkUsed = async () => {
+    if (!onMarkUsed) return;
+    setMarking(true);
+    try {
+      await onMarkUsed();
+      setMarkedUsedFlash(true);
+      setTimeout(() => setMarkedUsedFlash(false), 2200);
+    } finally {
+      setMarking(false);
+    }
+  };
+  const handleSendFeedback = async () => {
+    if (!onSubmitFeedback || !fbText.trim()) return;
+    setFbState({ sending: true, sent: false, synced: null });
+    try {
+      const res = await onSubmitFeedback({ subName: fbSubName.trim(), text: fbText.trim() });
+      setFbState({ sending: false, sent: true, synced: !!res?.synced });
+      setFbText(""); setFbSubName("");
+      setTimeout(() => setFbState(s => ({ ...s, sent: false })), 3000);
+    } catch (e) {
+      setFbState({ sending: false, sent: false, synced: false });
+    }
+  };
 
   return (
     <div style={{
@@ -2426,17 +2841,6 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
             <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               {lesson.approach}
             </span>
-            {version != null && (
-              <span title={`${t.versionBadge} ${version}`} style={{
-                fontSize: 10, fontWeight: 600,
-                color: "var(--text-tertiary)",
-                background: "var(--bg-secondary)",
-                padding: "1px 7px", borderRadius: 10,
-                letterSpacing: "0.02em",
-              }}>
-                v{version}
-              </span>
-            )}
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{lesson.title}</h3>
           <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{lesson.summary}</p>
@@ -2451,6 +2855,22 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
           </div>
         )}
       </div>
+
+      {/* Phase 1: lesson-context strip (teacher/class/day/time/room) — only on accepted lesson */}
+      {!isOption && hasCtx && (
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: 14, rowGap: 6,
+          background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
+          borderRadius: "var(--radius-sm)", padding: "8px 12px", marginBottom: 14,
+          fontSize: 12, color: "var(--text-secondary)",
+        }}>
+          {ctx.teacher && <span><strong style={{ color: "var(--text-tertiary)", fontWeight: 600 }}>{t.teacher}:</strong> {ctx.teacher}</span>}
+          {ctx.className && <span><strong style={{ color: "var(--text-tertiary)", fontWeight: 600 }}>{t.className}:</strong> {ctx.className}</span>}
+          {ctx.day && <span><strong style={{ color: "var(--text-tertiary)", fontWeight: 600 }}>{t.day}:</strong> {ctx.day}</span>}
+          {ctx.time && <span><strong style={{ color: "var(--text-tertiary)", fontWeight: 600 }}>{t.time}:</strong> {ctx.time}</span>}
+          {ctx.room && <span><strong style={{ color: "var(--text-tertiary)", fontWeight: 600 }}>{t.room}:</strong> {ctx.room}</span>}
+        </div>
+      )}
 
       <div style={{ display: "grid", gap: 16 }}>
         {/* AT-A-GLANCE — three column row of objective / prior knowledge / criteria */}
@@ -2834,6 +3254,89 @@ function LessonCard({ lesson, t, onPick, isOption, optionLabel, version }) {
         )}
       </div>
 
+      {/* Phase 1: Mark-as-used + Sub feedback — only on the accepted (non-option) lesson */}
+      {!isOption && (onMarkUsed || onSubmitFeedback) && (
+        <div className="no-print" style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: 12 }}>
+          {onMarkUsed && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {markedUsedFlash && (
+                <span style={{ fontSize: 12, color: "var(--success-text, #1f7a4d)", fontWeight: 500 }}>
+                  ✓ {t.markedUsed}
+                </span>
+              )}
+              <Button variant="secondary" icon={<Icon name="check" size={14} />} onClick={handleMarkUsed} disabled={marking}>
+                {t.markUsed}
+              </Button>
+            </div>
+          )}
+
+          {onSubmitFeedback && (
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+              <button onClick={() => setFeedbackOpen(o => !o)} style={{
+                width: "100%", textAlign: "left", padding: "10px 14px",
+                background: "var(--bg-secondary)", border: "none",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+              }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  💬 {t.feedbackTitle}
+                  {existingFeedback.length > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", background: "var(--bg-surface)", padding: "1px 7px", borderRadius: 10 }}>
+                      {existingFeedback.length}
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)" }}>
+                  {feedbackOpen ? t.feedbackHide : t.feedbackShow} {feedbackOpen ? "▴" : "▾"}
+                </span>
+              </button>
+
+              {feedbackOpen && (
+                <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  {existingFeedback.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontStyle: "italic" }}>{t.feedbackEmpty}</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {existingFeedback.map((f, i) => (
+                        <div key={i} style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)", padding: "8px 10px" }}>
+                          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ fontWeight: 600 }}>{f.subName || t.substituteName}</span>
+                            <span>{f.at ? new Date(f.at).toLocaleString() : ""}</span>
+                          </div>
+                          <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{f.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <Input value={fbSubName} onChange={(e) => setFbSubName(e.target.value)} placeholder={t.substituteName} />
+                    <textarea value={fbText} onChange={(e) => setFbText(e.target.value)}
+                      placeholder={t.feedbackPlaceholder} rows={3}
+                      style={{
+                        width: "100%", padding: "8px 10px", fontSize: 13, lineHeight: 1.5,
+                        border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)",
+                        background: "var(--bg-surface)", color: "var(--text-primary)",
+                        fontFamily: "inherit", resize: "vertical",
+                      }} />
+                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
+                      {fbState.sent && (
+                        <span style={{ fontSize: 12, color: "var(--success-text, #1f7a4d)", fontWeight: 500 }}>
+                          ✓ {t.feedbackSent}{fbState.synced === false ? ` (${t.syncFailedLocal})` : ""}
+                        </span>
+                      )}
+                      <Button variant="primary" onClick={handleSendFeedback} disabled={fbState.sending || !fbText.trim()}>
+                        {fbState.sending ? t.feedbackSending : t.feedbackSubmit}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {isOption && (
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-subtle)", display: "flex", justifyContent: "flex-end" }}>
           <Button variant="primary" icon={<Icon name="check" size={14} />} onClick={onPick}>{t.chooseAccept}</Button>
@@ -2875,14 +3378,25 @@ function App() {
     localKey: "",
     localModel: "local-model",
     language: "sv",
+    appsScriptUrl: "",
+    schoolId: "school-1",
   });
   const [showSettings, setShowSettings] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
+  const [showBank, setShowBank] = useState(false);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState("");
+  const [showPoolFull, setShowPoolFull] = useState(false);
   const [stage, setStage] = useState("");
   const [grade, setGrade] = useState("");
   const [subject, setSubject] = useState("");
   const [topic, setTopic] = useState("");
   const [duration, setDuration] = useState(60);
+  // Phase 1: lesson-context fields (top-of-plan metadata)
+  const [ctxTeacher, setCtxTeacher] = useState("");
+  const [ctxClass, setCtxClass] = useState("");
+  const [ctxDay, setCtxDay] = useState("");
+  const [ctxTime, setCtxTime] = useState("");
+  const [ctxRoom, setCtxRoom] = useState("");
   const [detailLevel, setDetailLevel] = useState("standard"); // 'quick' | 'standard' | 'full'
   const [extrasEnabled, setExtrasEnabled] = useState({
     worksheet: true,    // smart default ON
@@ -2919,6 +3433,25 @@ function App() {
     setConfig(next);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
   };
+
+  // Phase 3: refresh the bank from Apps Script on mount + whenever URL changes.
+  const refreshBank = async () => {
+    const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (!url) return;
+    setBankLoading(true); setBankError("");
+    try {
+      await bankAPI.refresh(url);
+    } catch (e) {
+      console.error("Bank refresh failed", e);
+      setBankError(String(e.message || e));
+    } finally {
+      setBankLoading(false);
+    }
+  };
+  useEffect(() => {
+    refreshBank();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.appsScriptUrl]);
 
   useEffect(() => { setGrade(""); setSubject(""); setTopicSuggestions([]); }, [stage]);
   useEffect(() => { setTopicSuggestions([]); }, [grade, subject]);
@@ -2982,24 +3515,37 @@ function App() {
     }
   };
 
-  // Generate ONE lesson directly — no A/B/C choice screen.
-  // Saves to the library as a new version of (stage,grade,subject,topic) — so
-  // hitting "Generate" again with the same params creates v2, v3, etc.
+  // Phase 3: Saves into the shared remote bank. Server enforces ACTIVE_POOL_LIMIT.
   const generateLesson = async () => {
     if (!canGenerate) return;
+    const activePool = bankAPI.getActivePool({ stage, grade, subject });
+    if (activePool.length >= ACTIVE_POOL_LIMIT) {
+      setShowPoolFull(true);
+      return;
+    }
     setError(""); setLoadingChoices(true); setPending(null); setAcceptedLesson(null); setSubLesson(null);
     try {
       const result = await runLLM(config,
-        // branchIndex/totalBranches kept at 0/1 — the prompt's "different angle" instruction
-        // is irrelevant when only one lesson is generated. The model just produces one good plan.
         lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: 0, totalBranches: 1, language: config.language, detailLevel })
       );
-      const lessonId = `lesson-${Date.now()}`;
-      const v = lessonLibrary.add({
-        stage, grade, subject, topic, duration,
-        lesson: result,
-      });
-      const accepted = { ...result, id: lessonId, isSub: false, version: v };
+      const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+      let record;
+      try {
+        record = await bankAPI.addLesson(url, {
+          schoolId: config.schoolId || "school-1",
+          stage, grade, subject, topic, title: result.title || topic,
+          duration, lesson: result,
+        });
+      } catch (e) {
+        if (e.code === "pool_full") {
+          await refreshBank();
+          setShowPoolFull(true);
+          return;
+        }
+        throw e;
+      }
+      const ctx = { teacher: ctxTeacher, className: ctxClass, day: ctxDay, time: ctxTime, room: ctxRoom };
+      const accepted = { ...result, id: record.lesson_id, isSub: false, ctx };
       setAcceptedLesson(accepted);
       setActiveTab(tabs => ({ ...tabs, [accepted.id]: "plan" }));
     } catch (e) {
@@ -3033,19 +3579,96 @@ function App() {
     }
   };
 
-  // Load a previously saved version without re-saving. Sets up the form
-  // so further "Generate" calls continue versioning the same group.
-  const loadLessonFromLibrary = ({ entry, ver }) => {
-    setStage(entry.stage);
-    setGrade(entry.grade);
-    setSubject(entry.subject);
-    setTopic(entry.topic);
-    if (entry.duration) setDuration(entry.duration);
-    setAcceptedLesson({ ...ver.lesson, id: `loaded-${Date.now()}`, isSub: false, version: ver.v });
-    setPending(null);
-    setSubLesson(null);
-    setShowLibrary(false);
+  // Open a saved lesson from the bank by its remote id.
+  const loadLessonFromBank = (id) => {
+    const rec = bankAPI.byId(id);
+    if (!rec) return;
+    setStage(rec.stage); setGrade(String(rec.grade)); setSubject(rec.subject);
+    setTopic(rec.topic || ""); if (rec.duration) setDuration(Number(rec.duration));
+    setAcceptedLesson({
+      ...rec.lesson, id: rec.lesson_id, isSub: !!rec.lesson?.isSub,
+      ctx: { teacher: ctxTeacher, className: ctxClass, day: ctxDay, time: ctxTime, room: ctxRoom },
+    });
+    setPending(null); setSubLesson(null);
+    setShowPoolFull(false); setShowBank(false);
   };
+
+  // Mark current accepted lesson as "used" — auto-archives in the bank (frees a slot
+  // for ALL schools — pool is shared) AND logs usage locally (per school).
+  const markLessonUsed = async () => {
+    if (!acceptedLesson?.id) return { ok: false, reason: "no-id" };
+    const rec = bankAPI.byId(acceptedLesson.id);
+    const used = {
+      teacher: acceptedLesson.ctx?.teacher || ctxTeacher,
+      className: acceptedLesson.ctx?.className || ctxClass,
+      day: acceptedLesson.ctx?.day || ctxDay,
+      time: acceptedLesson.ctx?.time || ctxTime,
+      room: acceptedLesson.ctx?.room || ctxRoom,
+    };
+    // Local: always log usage.
+    lessonLibrary.addUsage({ lessonId: acceptedLesson.id, used });
+    // Remote: log to Sheet + archive in bank.
+    const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (url) {
+      try {
+        await postToAppsScript(url, {
+          type: "usage",
+          schoolId: config.schoolId || "school-1",
+          lessonId: acceptedLesson.id,
+          title: acceptedLesson.title,
+          stage: rec?.stage, grade: rec?.grade, subject: rec?.subject, topic: rec?.topic,
+          ...used,
+        });
+        await bankAPI.archive(url, acceptedLesson.id, config.schoolId || "school-1");
+        return { ok: true, synced: true };
+      } catch (e) {
+        console.error("Apps Script sync failed", e);
+        return { ok: true, synced: false };
+      }
+    }
+    return { ok: true, synced: false };
+  };
+
+  // Submit substitute feedback for the current accepted lesson (local + remote log).
+  const submitLessonFeedback = async ({ subName, text }) => {
+    if (!acceptedLesson?.id) return { ok: false };
+    const rec = bankAPI.byId(acceptedLesson.id);
+    const feedback = { subName, text };
+    lessonLibrary.addFeedback({ lessonId: acceptedLesson.id, feedback });
+    const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (url) {
+      try {
+        await postToAppsScript(url, {
+          type: "feedback",
+          schoolId: config.schoolId || "school-1",
+          lessonId: acceptedLesson.id,
+          title: acceptedLesson.title,
+          stage: rec?.stage, grade: rec?.grade, subject: rec?.subject, topic: rec?.topic,
+          ...feedback,
+        });
+        return { ok: true, synced: true };
+      } catch (e) {
+        console.error("Apps Script sync failed", e);
+        return { ok: true, synced: false };
+      }
+    }
+    return { ok: true, synced: false };
+  };
+
+  // Manual archive (e.g. teacher decides this lesson is no good) — bank-wide.
+  const archiveLessonInBank = async (id) => {
+    const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    try {
+      await bankAPI.archive(url, id, config.schoolId || "school-1");
+    } catch (e) {
+      console.error("Archive failed", e);
+    }
+    if (acceptedLesson?.id === id) setAcceptedLesson(null);
+  };
+
+  // Wrapper for the PoolFullModal "Open" button.
+  const openPoolLesson = (id) => loadLessonFromBank(id);
+
 
   // Generate a substitute lesson. If acceptedLesson exists, builds on top of it
   // (attached follow-up under the main lesson). If not, generates a standalone
@@ -3055,6 +3678,13 @@ function App() {
     if (!hasKey) return;
     if (!standalone && !acceptedLesson) return;
     if (standalone && !canGenerate) return;
+    if (standalone) {
+      const activePool = bankAPI.getActivePool({ stage, grade, subject });
+      if (activePool.length >= ACTIVE_POOL_LIMIT) {
+        setShowPoolFull(true);
+        return;
+      }
+    }
     setError("");
     setLoadingSub(true);
     if (standalone) { setLoadingChoices(true); setAcceptedLesson(null); setSubLesson(null); }
@@ -3067,13 +3697,24 @@ function App() {
         })
       );
       if (standalone) {
-        // Treat standalone sub like any other lesson — save with versioning, show as accepted.
-        const lessonId = `sub-${Date.now()}`;
-        const v = lessonLibrary.add({
-          stage, grade, subject, topic, duration,
-          lesson: { ...result, isSub: true },
-        });
-        const accepted = { ...result, id: lessonId, isSub: true, version: v };
+        const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+        let record;
+        try {
+          record = await bankAPI.addLesson(url, {
+            schoolId: config.schoolId || "school-1",
+            stage, grade, subject, topic, title: result.title || topic,
+            duration, lesson: { ...result, isSub: true },
+          });
+        } catch (e) {
+          if (e.code === "pool_full") {
+            await refreshBank();
+            setShowPoolFull(true);
+            return;
+          }
+          throw e;
+        }
+        const ctx = { teacher: ctxTeacher, className: ctxClass, day: ctxDay, time: ctxTime, room: ctxRoom };
+        const accepted = { ...result, id: record.lesson_id, isSub: true, ctx };
         setAcceptedLesson(accepted);
         setActiveTab(tabs => ({ ...tabs, [accepted.id]: "plan" }));
       } else {
@@ -3197,7 +3838,31 @@ function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {showSettings && <SettingsModal config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} t={t} />}
-      {showLibrary && <LibraryModal onClose={() => setShowLibrary(false)} onLoad={loadLessonFromLibrary} t={t} />}
+      {showBank && (
+        <BankView
+          t={t}
+          loading={bankLoading}
+          error={bankError}
+          onClose={() => setShowBank(false)}
+          onOpen={(id) => loadLessonFromBank(id)}
+          onArchive={(id) => archiveLessonInBank(id)}
+          onRefresh={refreshBank}
+        />
+      )}
+      {showPoolFull && (
+        <PoolFullModal
+          stage={stage} grade={grade} subject={subject}
+          t={t}
+          onClose={() => setShowPoolFull(false)}
+          onOpen={(id) => openPoolLesson(id)}
+          onArchiveAndGenerate={async (id) => {
+            const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+            try { await bankAPI.archive(url, id, config.schoolId || "school-1"); } catch (e) { console.error(e); }
+            setShowPoolFull(false);
+            setTimeout(() => generateLesson(), 0);
+          }}
+        />
+      )}
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "32px 20px 80px" }}>
         {/* HEADER */}
@@ -3222,8 +3887,8 @@ function App() {
             <Button variant="secondary" icon={<Icon name="settings" size={14} />} onClick={() => setShowSettings(true)}>
               {t.apiSettings}
             </Button>
-            <Button variant="secondary" onClick={() => setShowLibrary(true)} title={t.savedLessons}>
-              {t.savedLessons} <SavedCountInline />
+            <Button variant="secondary" icon={<Icon name="book" size={14} />} onClick={() => setShowBank(true)} title={t.bankTitle}>
+              {t.bankButton} <SavedCountInline />
             </Button>
           </div>
         </header>
@@ -3272,6 +3937,23 @@ function App() {
                 {[30, 40, 45, 60, 80, 90, 120].map((d) => <option key={d} value={d}>{d} min</option>)}
               </Select>
             </Field>
+          </div>
+
+          {/* Phase 1: lesson-context fields (teacher/class/day/time/room) */}
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px dashed var(--border-default)" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t.contextHeader}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontStyle: "italic" }}>{t.contextOptional}</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+              <Field label={t.teacher}><Input value={ctxTeacher} onChange={(e) => setCtxTeacher(e.target.value)} placeholder="—" /></Field>
+              <Field label={t.className}><Input value={ctxClass} onChange={(e) => setCtxClass(e.target.value)} placeholder="—" /></Field>
+              <Field label={t.day}><Input value={ctxDay} onChange={(e) => setCtxDay(e.target.value)} placeholder="—" type="date" /></Field>
+              <Field label={t.time}><Input value={ctxTime} onChange={(e) => setCtxTime(e.target.value)} placeholder="—" /></Field>
+              <Field label={t.room}><Input value={ctxRoom} onChange={(e) => setCtxRoom(e.target.value)} placeholder="—" /></Field>
+            </div>
           </div>
           <div style={{ marginTop: 14 }}>
             <Field label={t.topic}>
@@ -3340,19 +4022,25 @@ function App() {
             />
           </div>
 
-          <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-            {acceptedLesson && (
-              <Button variant="secondary" icon={<Icon name="refresh" size={14} />} onClick={reset}>{t.reset}</Button>
-            )}
-            <Button variant="yellow" icon={loadingSub ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="coffee" size={14} />}
-              onClick={() => generateSub({ standalone: true })} disabled={!canGenerate || loadingChoices || loadingSub}
-              title={t.createStandaloneSubHint}>
-              {loadingSub ? t.creating : t.createStandaloneSub}
-            </Button>
-            <Button variant="primary" icon={loadingChoices ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="sparkles" size={14} />}
-              onClick={generateLesson} disabled={!canGenerate || loadingChoices || loadingSub}>
-              {loadingChoices ? t.generating : t.generateChoices}
-            </Button>
+          <div style={{ marginTop: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {/* Live pool counter for (stage|grade|subject) */}
+            {stage && grade && subject ? (
+              <PoolIndicator stage={stage} grade={grade} subject={subject} t={t} onOpen={() => setShowPoolFull(true)} />
+            ) : <span />}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {acceptedLesson && (
+                <Button variant="secondary" icon={<Icon name="refresh" size={14} />} onClick={reset}>{t.reset}</Button>
+              )}
+              <Button variant="yellow" icon={loadingSub ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="coffee" size={14} />}
+                onClick={() => generateSub({ standalone: true })} disabled={!canGenerate || loadingChoices || loadingSub}
+                title={t.createStandaloneSubHint}>
+                {loadingSub ? t.creating : t.createStandaloneSub}
+              </Button>
+              <Button variant="primary" icon={loadingChoices ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="sparkles" size={14} />}
+                onClick={generateLesson} disabled={!canGenerate || loadingChoices || loadingSub}>
+                {loadingChoices ? t.generating : t.generateChoices}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -3389,6 +4077,8 @@ function App() {
               }}
               activeTab={activeTab[acceptedLesson.id] || "plan"}
               setActiveTab={(tab) => setActiveTab(s => ({ ...s, [acceptedLesson.id]: tab }))}
+              onMarkUsed={markLessonUsed}
+              onSubmitFeedback={submitLessonFeedback}
             />
 
             {!subLesson && (
@@ -3431,14 +4121,14 @@ function App() {
         </div>
       </div>
 
-      <AppVersionBadgeMount providerLabel={providerDisplayName(config.provider, config.language)} onOpenLibrary={() => setShowLibrary(true)} />
+      <AppVersionBadgeMount providerLabel={providerDisplayName(config.provider, config.language)} onOpenLibrary={() => setShowBank(true)} />
     </div>
   );
 }
 
 function AppVersionBadgeMount({ providerLabel, onOpenLibrary }) {
-  useLibraryVersion();
-  const savedCount = lessonLibrary.getAll().reduce((sum, e) => sum + e.versions.length, 0);
+  useBankVersion();
+  const savedCount = bankAPI.active().length;
   return <VersionBadge providerLabel={providerLabel} savedCount={savedCount} onOpenLibrary={onOpenLibrary} />;
 }
 
