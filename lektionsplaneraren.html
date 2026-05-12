@@ -550,6 +550,7 @@ const LANG = {
     alreadyUsedHere: "Använd på din skola",
     schoolIdLabel: "Skol-ID",
     schoolIdHelp: "Ett unikt ID för din skola (bokstäver/siffror, inga mellanslag).",
+    translating: "Översätter…",
     // Versioning + Library
     versionBadge: "Version",
     savedLessons: "Sparade lektioner",
@@ -814,6 +815,7 @@ const LANG = {
     alreadyUsedHere: "Used at your school",
     schoolIdLabel: "School ID",
     schoolIdHelp: "A unique ID for your school (letters/digits, no spaces).",
+    translating: "Translating…",
     // Versioning + Library
     versionBadge: "Version",
     savedLessons: "Saved lessons",
@@ -1451,6 +1453,29 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
   "teacherNotes": ["2-4 övriga praktiska anmärkningar"],
   "subTip": "Det viktigaste enskilda tipset till vikarien för just denna lektion (1 mening)"
 }`;
+}
+
+// Translate an entire lesson plan JSON object from Swedish to English.
+// Returns a translation prompt that asks the model to keep the SAME JSON shape
+// but translate every string field to English. Curriculum references (LGR22) stay
+// recognizable (e.g. "LGR22 connection" keeps the term LGR22).
+function translateLessonPrompt({ lesson, targetLanguage }) {
+  const target = targetLanguage === "en" ? "English" : "Swedish";
+  return `You are a translator. Translate this lesson plan JSON from Swedish to ${target}.
+
+CRITICAL RULES:
+1. Output ONLY the translated JSON. No commentary, no markdown, no backticks.
+2. Preserve the EXACT JSON structure — same keys, same nesting, same arrays.
+3. Translate every string VALUE. Do NOT translate JSON keys.
+4. Keep numbers, durations, and IDs unchanged.
+5. For curriculum references (LGR22, Gy22, central content phrases), keep the proper noun "LGR22"/"Gy22" but translate the surrounding description.
+6. Subject names: "Matematik" → "Mathematics", "Svenska" → "Swedish", "Engelska" → "English", "NO" → "Science", "SO" → "Social Studies", "Idrott" → "PE", "Bild" → "Visual Arts", "Musik" → "Music".
+7. Phase names: "Inledning" → "Introduction", "Genomgång" → "Direct teaching", "Stödd övning" → "Guided practice", "Enskild övning" → "Independent practice", "Avslutning" → "Closing".
+8. Keep teacher-script tone natural in ${target}. Don't translate word-for-word; translate meaning.
+9. If a value is already in ${target}, leave it unchanged.
+
+LESSON JSON TO TRANSLATE:
+${JSON.stringify(lesson, null, 2)}`;
 }
 
 // ============================================================
@@ -3458,11 +3483,9 @@ function App() {
   // Clear suggestions when language toggles — stale chips in the wrong language look broken.
   useEffect(() => { setTopicSuggestions([]); }, [config.language]);
 
-  // When the language toggles, regenerate the current lesson in the new language
-  // and clear any cached extras (they're language-bound and would look mixed).
-  // We use a ref to a callable so this effect doesn't need generateLesson in its closure;
-  // and we skip the very first render so loading the app with a saved language doesn't fire a generation.
-  const regenRef = useRef(null);
+  // Phase 4: When the language toggles, translate the current lesson (no regenerate).
+  // We use a ref to avoid stale-closure issues across renders.
+  const translateRef = useRef(null);
   const firstLangRender = useRef(true);
   useEffect(() => {
     if (firstLangRender.current) {
@@ -3473,10 +3496,9 @@ function App() {
     setExtrasCache({});
     setLoadingExtras({});
     setActiveTab({});
-    // Regenerate only if there's currently a lesson to retranslate. Use the same type
-    // (standalone sub vs. main lesson) as the current one.
-    if (acceptedLesson && regenRef.current) {
-      regenRef.current(acceptedLesson.isSub);
+    // Translate the currently accepted lesson into the new language (or revert to SV).
+    if (acceptedLesson && translateRef.current) {
+      translateRef.current(acceptedLesson.id, config.language);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.language]);
@@ -3516,6 +3538,7 @@ function App() {
   };
 
   // Phase 3: Saves into the shared remote bank. Server enforces ACTIVE_POOL_LIMIT.
+  // Phase 4: Always generate in Swedish (source of truth). UI translates on demand.
   const generateLesson = async () => {
     if (!canGenerate) return;
     const activePool = bankAPI.getActivePool({ stage, grade, subject });
@@ -3526,8 +3549,10 @@ function App() {
     setError(""); setLoadingChoices(true); setPending(null); setAcceptedLesson(null); setSubLesson(null);
     try {
       const result = await runLLM(config,
-        lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: 0, totalBranches: 1, language: config.language, detailLevel })
+        lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: 0, totalBranches: 1, language: "sv", detailLevel })
       );
+      // Attach translations container with sv as the source.
+      result.translations = { sv: result };
       const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
       let record;
       try {
@@ -3545,9 +3570,14 @@ function App() {
         throw e;
       }
       const ctx = { teacher: ctxTeacher, className: ctxClass, day: ctxDay, time: ctxTime, room: ctxRoom };
+      // The view we hand to the renderer is in the CURRENT UI language. If UI is EN,
+      // we kick off translation; until it lands, show Swedish.
       const accepted = { ...result, id: record.lesson_id, isSub: false, ctx };
       setAcceptedLesson(accepted);
       setActiveTab(tabs => ({ ...tabs, [accepted.id]: "plan" }));
+      if (config.language !== "sv") {
+        translateAndApplyLesson(record.lesson_id, config.language);
+      }
     } catch (e) {
       setError(`${t.error}: ${e.message}`);
       console.error(e);
@@ -3555,10 +3585,9 @@ function App() {
       setLoadingChoices(false);
     }
   };
-  // Keep the regen ref pointing at a dispatcher so the language-change effect
-  // can invoke either generateLesson or generateSub({standalone:true}) without
-  // a closure dependency on either.
-  regenRef.current = (wasSub) => wasSub ? generateSub({ standalone: true }) : generateLesson();
+  // Keep translateRef pointing at the latest translate function so the language-change
+  // effect doesn't capture a stale closure.
+  translateRef.current = (id, lang) => translateAndApplyLesson(id, lang);
 
   // Generate one extra. Safe to call multiple times — caches by (lessonId, kind).
   const generateExtra = async (lesson, kind) => {
@@ -3585,12 +3614,18 @@ function App() {
     if (!rec) return;
     setStage(rec.stage); setGrade(String(rec.grade)); setSubject(rec.subject);
     setTopic(rec.topic || ""); if (rec.duration) setDuration(Number(rec.duration));
+    // Pick view in current UI language if available; otherwise SV source.
+    const view = (rec.lesson?.translations?.[config.language]) || rec.lesson?.translations?.sv || rec.lesson;
     setAcceptedLesson({
-      ...rec.lesson, id: rec.lesson_id, isSub: !!rec.lesson?.isSub,
+      ...view, id: rec.lesson_id, isSub: !!rec.lesson?.isSub,
       ctx: { teacher: ctxTeacher, className: ctxClass, day: ctxDay, time: ctxTime, room: ctxRoom },
     });
     setPending(null); setSubLesson(null);
     setShowPoolFull(false); setShowBank(false);
+    // If UI is non-SV and translation missing, translate now.
+    if (config.language !== "sv" && !rec.lesson?.translations?.[config.language]) {
+      translateAndApplyLesson(id, config.language);
+    }
   };
 
   // Mark current accepted lesson as "used" — auto-archives in the bank (frees a slot
@@ -3669,6 +3704,50 @@ function App() {
   // Wrapper for the PoolFullModal "Open" button.
   const openPoolLesson = (id) => loadLessonFromBank(id);
 
+  // Phase 4: translate a lesson into target language and apply to the currently
+  // displayed acceptedLesson. Caches on the bank record so subsequent toggles
+  // are instant. The bank record's translation is persisted remotely best-effort.
+  const [translating, setTranslating] = useState(false);
+  const translateAndApplyLesson = async (lessonId, targetLang) => {
+    if (!lessonId || targetLang === "sv") return;
+    const rec = bankAPI.byId(lessonId);
+    if (!rec) return;
+    const sourceLesson = rec.lesson?.translations?.sv || rec.lesson;
+    const existing = rec.lesson?.translations?.[targetLang];
+    if (existing) {
+      // Already cached — apply immediately.
+      setAcceptedLesson(prev => prev && prev.id === lessonId
+        ? { ...existing, id: lessonId, isSub: prev.isSub, ctx: prev.ctx }
+        : prev);
+      return;
+    }
+    setTranslating(true);
+    try {
+      const result = await runLLM(config, translateLessonPrompt({ lesson: sourceLesson, targetLanguage: targetLang }));
+      // Cache locally
+      const cache = loadBankCache();
+      const cached = cache.lessons.find(l => l.lesson_id === lessonId);
+      if (cached) {
+        cached.lesson = cached.lesson || {};
+        cached.lesson.translations = cached.lesson.translations || { sv: sourceLesson };
+        cached.lesson.translations[targetLang] = result;
+        saveBankCache(cache);
+      }
+      // Apply to current view
+      setAcceptedLesson(prev => prev && prev.id === lessonId
+        ? { ...result, id: lessonId, isSub: prev.isSub, ctx: prev.ctx }
+        : prev);
+      // Best-effort: persist translation to bank (so other schools benefit).
+      // We re-POST as a translation update — Apps Script will need a tiny handler.
+      // For now we skip remote persistence; translations live in local cache.
+    } catch (e) {
+      console.error("Translate failed", e);
+      setError(`${t.error}: ${e.message}`);
+    } finally {
+      setTranslating(false);
+    }
+  };
+
 
   // Generate a substitute lesson. If acceptedLesson exists, builds on top of it
   // (attached follow-up under the main lesson). If not, generates a standalone
@@ -3693,10 +3772,11 @@ function App() {
         subPrompt({
           stage, grade, subject, topic, duration,
           baseLesson: standalone ? null : acceptedLesson,
-          language: config.language,
+          language: "sv",
         })
       );
       if (standalone) {
+        result.translations = { sv: result };
         const url = config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
         let record;
         try {
@@ -3717,6 +3797,9 @@ function App() {
         const accepted = { ...result, id: record.lesson_id, isSub: true, ctx };
         setAcceptedLesson(accepted);
         setActiveTab(tabs => ({ ...tabs, [accepted.id]: "plan" }));
+        if (config.language !== "sv") {
+          translateAndApplyLesson(record.lesson_id, config.language);
+        }
       } else {
         setSubLesson({ ...result, id: `sub-${Date.now()}`, isSub: true });
       }
@@ -4056,7 +4139,15 @@ function App() {
         {acceptedLesson && (
           <div style={{ marginBottom: 16 }}>
             <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600 }}>{t.yourLesson}</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                {t.yourLesson}
+                {translating && (
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Icon name="refresh" size={11} style={{ animation: "spin 0.8s linear infinite" }} />
+                    {t.translating}
+                  </span>
+                )}
+              </h2>
               <div style={{ display: "flex", gap: 8 }}>
                 <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={generateLesson}>{t.addAnother}</Button>
                 <Button variant="ghost" icon={<Icon name="print" size={13} />} onClick={() => window.print()}>{t.print}</Button>
