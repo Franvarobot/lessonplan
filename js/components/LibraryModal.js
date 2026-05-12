@@ -1,0 +1,1 @@
+console.log('✅ LibraryModal.js loaded');

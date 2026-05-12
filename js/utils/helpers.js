@@ -1,0 +1,1 @@
+console.log('✅ helpers.js loaded');
