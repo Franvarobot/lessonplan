@@ -1,7 +1,7 @@
 // ============================================================
 // SchoolPickerModal — pick existing or create new, with fuzzy-match
 // guard to prevent accidental duplicates.
-// Depends on: Icon.js (Input/Select/smallBtn), helpers.js (similarityRatio),
+// Depends on: Icon.js (Input/Field/smallBtn), helpers.js (similarityRatio),
 //             bankAPI.js (schoolsAPI), storage.js (useSchoolsVersion)
 // ============================================================
 const { useState: useState_school, useMemo: useMemo_school } = React;
@@ -79,15 +79,24 @@ window.SchoolPickerModal = function SchoolPickerModal({ onClose, onSelect, onCre
                 {t.schoolNoneYet}
               </div>
             ) : (
-              <window.Select value={currentSchoolId || ""} onChange={(e) => {
-                const found = schools.find(s => s.school_id === e.target.value);
-                if (found) onSelect(found);
-              }}>
-                <option value="">{t.schoolPickPrompt}</option>
-                {schools.map(s => (
-                  <option key={s.school_id} value={s.school_id}>{s.name}</option>
-                ))}
-              </window.Select>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {schools.map(s => {
+                  const active = s.school_id === currentSchoolId;
+                  return (
+                    <button key={s.school_id} onClick={() => onSelect(s)} style={{
+                      textAlign: "left", padding: "10px 12px", fontSize: 13, fontWeight: 500,
+                      background: active ? "var(--accent-bg)" : "var(--bg-surface)",
+                      color: active ? "var(--accent)" : "var(--text-primary)",
+                      border: "1px solid " + (active ? "var(--accent)" : "var(--border-default)"),
+                      borderRadius: "var(--radius-md)", cursor: "pointer",
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}>
+                      <span>{s.name}</span>
+                      {active && <span>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
             )}
             <div style={{ borderTop: "1px dashed var(--border-default)", paddingTop: 10 }}>
               <button onClick={() => { setMode("create"); setError(""); }} style={{
