@@ -1,2 +1,2 @@
-console.log('✅ i18n.js loaded');
-window.t = (key) => key;
+window.t = (k) => k;
+console.log('✅ i18n loaded');

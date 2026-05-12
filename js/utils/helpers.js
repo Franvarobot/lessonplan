@@ -1,1 +1,1 @@
-console.log('✅ helpers.js loaded');
+console.log('✅ helpers loaded');

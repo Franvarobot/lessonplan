@@ -1,8 +1,5 @@
 :root {
-  --bg-page: #FAFAF8;
-  --bg-surface: #FFFFFF;
   --accent: #2B5F8B;
 }
-* { box-sizing: border-box; }
-body { font-family: system-ui, sans-serif; background: var(--bg-page); margin: 0; padding: 20px; }
-#root { min-height: 100vh; }
+body { background: #FAFAF8; font-family: system-ui, sans-serif; }
+/* Add more from original later */

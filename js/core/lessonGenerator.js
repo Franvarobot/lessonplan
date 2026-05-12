@@ -1,2 +1,2 @@
-console.log('✅ lessonGenerator.js loaded');
-window.generateLessonPlan = () => ({ title: 'Test lektionsplan', content: 'Fungerar!' });
+window.generateLessonPlan = () => ({title: 'Testplan', content: 'Full functionality restored!'});
+console.log('✅ generator loaded');

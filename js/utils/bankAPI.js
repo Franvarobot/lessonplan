@@ -1,2 +1,2 @@
-console.log('✅ bankAPI.js loaded');
-window.bankAPI = { all: () => [], active: () => [] };
+window.bankAPI = {load: () => [], save: () => {}};
+console.log('✅ bankAPI loaded');
