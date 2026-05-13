@@ -204,7 +204,7 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
 }`;
 };
 
-window.subPrompt = function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language }) {
+window.subPrompt = function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language, detailLevel = "standard" }) {
   const isGy = stage === "Gymnasiet";
   const curriculum = isGy ? "Gy22" : "LGR22";
   const isEn = language === "en";
@@ -217,6 +217,7 @@ window.subPrompt = function subPrompt({ stage, grade, subject, topic, duration, 
   const stageLabel = isEn ? window.localizeLabel(stage, "en") : stage;
   const gradeLabel = isEn ? window.localizeLabel(grade, "en") : grade;
   const subjectLabel = isEn ? window.localizeLabel(subject, "en") : subject;
+
   const baseContext = baseLesson ? `
 
 ELEVERNA HAR PRECIS GÅTT IGENOM (du måste bygga på exakt detta):
@@ -226,106 +227,119 @@ ELEVERNA HAR PRECIS GÅTT IGENOM (du måste bygga på exakt detta):
 - Vad de gjorde: ${(baseLesson.phases || []).map(p => `${p.name} (${p.minutes}min): ${(p.studentsDo || []).join("; ")}`).join(" | ") || (baseLesson.activities || []).join("; ")}
 - Framgångskriterier från ordinarie lektion: ${(baseLesson.successCriteria || []).join("; ")}` : `
 
-OBS: Detta är en FRISTÅENDE vikarielektion — det finns ingen ordinarie lektion att bygga på. Koordinatorn vet inte exakt vad eleverna senast gjort. Anta vanliga förkunskaper för årskursen och ämnet. Lektionen ska kunna fungera oberoende av vad eleverna gjort förra gången. Den ska ändå vara turnkey för vikarien.`;
+OBS: Detta är en FRISTÅENDE vikarielektion — det finns ingen ordinarie lektion att bygga på. Koordinatorn vet inte exakt vad eleverna senast gjort. Anta vanliga förkunskaper för årskursen och ämnet. Lektionen ska kunna fungera oberoende av vad eleverna gjort förra gången.`;
 
   const rule1 = baseLesson
     ? `1. INGA NYA begrepp införs. Lektionen befäster det eleverna redan kan.`
-    : `1. Anta vanliga förkunskaper för årskursen. Lektionen får introducera grundläggande begrepp men de ska FÖRKLARAS ordagrant i planen — vikarien kan inte fylla i kunskapsgapet. Föredra repetition/tillämpning över helt nytt material.`;
+    : `1. Anta vanliga förkunskaper för årskursen. Lektionen får introducera grundläggande begrepp men de ska FÖRKLARAS ordagrant i planen. Föredra repetition/tillämpning över helt nytt material.`;
 
-  return `${langPrefix}Du är en svensk förstelärare som planerar en VIKARIELÄKTION enligt ${curriculum}. Detta är en LIVRÄDDNING för en vikarie utan ämneskunskap. Varje detalj måste vara TURNKEY — vikarien öppnar dokumentet, läser och kan undervisa direkt.
+  // Detail-level scope for sub lessons
+  const detailInstr = {
+    quick: `DETALJNIVÅ: SNABB — kort och enkel plan, max 1 sida.
+- 3-4 faser. Varje fas: 2-3 steg i teacherDoes (korta meningar). Ingen teacherScript, inga anticipatedResponses.
+- Embedded content: max 5 frågor/tal med facit — inte mer.
+- Inga commonPitfalls, ingen classroomManagement.
+- extraTime: bara 1 tier (5 eller 10 min).
+- extraActivities: 1 enkel aktivitet.
+- Fokus på det allra viktigaste — vikarien ska kunna skumma och förstå på 60 sekunder.`,
+    standard: `DETALJNIVÅ: STANDARD — tydlig plan med lagom detalj, ca 2 sidor.
+- 3-5 faser. teacherScript för introduktionen och avslutningen (inte varje fas).
+- Embedded content: 5-8 frågor/tal/text.
+- commonPitfalls: 2-3 punkter.
+- extraTime: 2 tiers (5 och 15 min).
+- extraActivities: 2 aktiviteter.`,
+    full: `DETALJNIVÅ: FULL — komplett dokumentation för vikarier eller observation, ca 3 sidor.
+- 4-5 faser, alla med teacherScript och anticipatedResponses.
+- Embedded content: 8-12 frågor/tal/text med fullständigt facit.
+- commonPitfalls: 3-5 punkter. classroomManagement: 3-4 punkter.
+- extraTime: alla 4 tiers (5, 10, 15, 20 min).
+- extraActivities: 2-3 aktiviteter.`,
+  }[detailLevel] || "";
+
+  const optionalFieldsHint = detailLevel === "quick"
+    ? `\nVIKTIGT: Lämna BORT helt (inga tomma arrayer): anticipatedResponses, teacherScript, classroomManagement, commonPitfalls. extraTime: max 1 tier.`
+    : detailLevel === "standard"
+      ? `\nVIKTIGT: anticipatedResponses och teacherScript inkluderas BARA i intro och avslutning. classroomManagement: utelämna.`
+      : "";
+
+  return `${langPrefix}Du är en svensk förstelärare som planerar en VIKARIELEKTION enligt ${curriculum}. Planen ska vara OMEDELBART ANVÄNDBAR — vikarien öppnar dokumentet, läser och kan börja undervisa inom 2 minuter.
 
 KONTEXT:
 - Stadium: ${stageLabel}, Årskurs: ${gradeLabel}, Ämne: ${subjectLabel}
 - Tema/område: "${topic}"
 - Lektionstid: ${duration} minuter${baseContext}
 
-ABSOLUTA KRAV:
+${detailInstr}${optionalFieldsHint}
+
+ABSOLUTA KRAV — VIKARIELEKTION:
 ${rule1}
-2. ALLT INNEHÅLL ÄR FÖRBEREDT I PLANEN. Om aktiviteten är "låt eleverna lösa fem tal" — då ska de fem talen finnas i planen, MED FACIT. Om det är "diskutera tre frågor" — då ska de tre frågorna finnas, med exempel-svar att lyssna efter. Om det är "läs en kort text" — då ska texten finnas (skriv den själv, max 200 ord).
-3. SKRIPT FÖR VIKARIEN — varje fas har "teacherScript" med EXAKTA formuleringar i citattecken som vikarien kan säga ordagrant.
-4. ANTICIPERADE SVAR — vad eleverna sannolikt säger och hur vikarien bemöter det, inklusive felsvar.
-5. INGEN VAGT SPRÅK. Aldrig "diskutera ämnet" — alltid "ställ frågan: '...'. Lyssna efter svar som nämner X, Y eller Z."
-6. Roligt och engagerande (lek, station, tävling, kreativt projekt, quiz, samarbete) men pedagogiskt värdefullt.
-7. Bara material som rimligen finns i klassrummet (papper, pennor, tavla, ev. surfplattor).
-8. EXTRA-AKTIVITETER om tid blir över — minst 2 stycken, fullt utskrivna med tydliga instruktioner och facit. Vikarien ska aldrig stå tom.
+2. ALLT INNEHÅLL ÄR FÖRBERETT I PLANEN. Om aktiviteten är "lös fem tal" — skriv talen MED FACIT. Om "diskutera tre frågor" — skriv frågorna MED exempelsvar. Om "läs en kort text" — skriv texten (max 150 ord).
+3. BRIEF STEP-BY-STEP. Varje fas = numrerade steg, korta meningar, aktiva verb. "Skriv på tavlan:", "Säg:", "Läs upp:", "Ge eleverna 10 min att:". Vikarien ska kunna följa med ett finger.
+4. ROLIGT OCH ENGAGERANDE — quiz, tävling, par-arbete, rörelse, kreativt. Välj format som håller energin uppe utan att kräva ämneskunskap.
+5. MATERIAL = KLASSRUMSBASICS ENDAST. Papper och pennor är OK. Tavla/whiteboard är OK. Projektorn/skärm OM TILLGÄNGLIG (märk tydligt som "om projektor finns"). INGET som kräver utskrift, kopiering, specialutrustning eller labbmaterial. Vikarien har inte tid att fixa detta.
+6. PROJEKTORBILD (om relevant): om du föreslår att visa något på projektor, skriv ut EXAKT vad som ska visas — en bild-URL från Wikipedia/Wikimedia Commons, ett enkelt diagram beskrivet i ord, eller en lista vikarien kan visa i helskärm i webbläsaren. Aldrig "visa en bild på X" utan att ange var bilden finns.
+7. INSTRUKTIONER = KORTA OCH DIREKTA. Max 3-4 meningar per fas-steg. Inga långa förklaringar om pedagogik. Vikarien är inte lärare — hen behöver "gör detta, säg detta, vänta på det".
+8. EXTRA-AKTIVITETER om tid blir över — fullt utskrivna, kan köras utan förberedelse.
 
-🚫 ABSOLUT FÖRBJUDET — FANTOMREFERENSER 🚫
-EXTRA viktigt för en vikarie utan ämneskunskap. Du får ALDRIG referera till något som inte finns konkret i planen.
+🚫 FÖRBJUDET — FANTOMREFERENSER:
+- ❌ "Peka på Adjektivbanken" → ✅ skriv listan ordagrant på tavlan i en förberedelsefas
+- ❌ "Använd boken" → ✅ skriv ut frågorna/texten i embeddedContent
+- ❌ "Visa bilden" → ✅ ange URL eller beskriv bilden ordagrant
+- ❌ Skrivna uppgifter utan facit → ✅ alla frågor/tal har svar i planen
 
-FÖRBJUDNA formuleringar (och vad du ska skriva istället):
-- ❌ "Peka på Adjektivbanken på tavlan"
-  ✅ Skriv istället en förberedelsefas: "Innan eleverna kommer in: Skriv följande på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd."
-- ❌ "Hänvisa till texten ni läste förra gången"
-  ✅ Skriv istället: "Den text eleverna läste förra lektionen handlade om X. Påminn dem genom att säga: '...'"
-- ❌ "Eleverna gör övning 3 i boken"
-  ✅ Skriv ut hela övningen ordagrant med alla frågor/tal och facit direkt i planen.
-- ❌ "Använd bilden ni jobbat med"
-  ✅ Beskriv bilden i ord eller skriv "Vikarien har INGEN bild — använd istället denna beskrivning: '...'."
-
-🚫 ABSOLUT FÖRBJUDET — JSON-FÄLTNAMN I LÄRARENS INSTRUKTIONER 🚫
-Lärarens/vikariens instruktioner i "teacherDoes" ska vara NATURLIGT SPRÅK som en människa kan följa. Du får ALDRIG använda tekniska fältnamn från JSON-schemat (som "boardLayout", "embeddedContent", "teacherScript", "anticipatedResponses" etc.) i texten. Skriv istället vad läraren FAKTISKT SKA GÖRA.
-- ❌ "Write out boardLayout on the board"
-  ✅ "Skriv följande på tavlan: [konkret text]"
-- ❌ "Read questions from embeddedContent"
-  ✅ "Läs upp fråga 1: 'Vad betyder ordet vän på engelska?'"
-- ❌ "Follow the teacherScript"
-  ✅ "Säg: 'Hej allihop! Idag ska vi...'"
-
-REGEL: Innan du skriver phases, lista alla föremål/innehåll som vikarien kommer att referera till. För VARJE sådant: antingen lägg in en "Förberedelse"-fas (med innehållet skrivet ordagrant), eller skriv ut det fullständiga innehållet direkt i fasens instruktioner. Om vikarien inte kan utföra ett steg utan att förstå ämnet — då har du misslyckats.
+🚫 FÖRBJUDET — JSON-FÄLTNAMN I INSTRUKTIONER:
+Skriv aldrig "boardLayout", "embeddedContent", "teacherScript" i text som vikarien läser. Skriv vad hen FAKTISKT SKA GÖRA.
 
 ${langInstr}
 
-Svara endast med ett giltigt JSON-objekt, ingen markdown:
+Svara ENDAST med ett giltigt JSON-objekt, ingen markdown:
 {
-  "title": "rolig titel med en hook som beskriver vad lektionen handlar om",
-  "approach": "Vikarielektion (kollaborativ / quiz / station / tävling / etc.)",
-  "summary": "2-3 meningar om vad eleverna gör och hur det knyter an till tidigare lektion",
-  "learningGoal": "vilket tidigare lärande som befästs (en mening, mätbart)",
-  "priorKnowledge": "vad eleverna förväntas redan kunna (1 mening)",
-  "lgr22_connection": "kort koppling till ${curriculum} (1-2 meningar)",
-  "successCriteria": ["3 konkreta tecken på att lektionen lyckas"],
-  "boardLayout": "VERBATIM text som vikarien skriver på tavlan INNAN eleverna kommer in. Skriv ut allt: lektionens titel, agenda, eventuella ord-listor / nyckelbegrepp / exempel som senare faser refererar till. Använd \\n för radbrytningar. Detta är vad vikarien faktiskt kommer att kopiera till tavlan — så det ska inte innehålla några platshållare.",
-  "materialsNeeded": ["3-6 enkla material — ange antal (t.ex. 'A4-papper, 1 per elev')"],
-  "preparedContent": {
-    "description": "Beskriv vilket material som ligger inbäddat i planen för vikarien",
-    "items": ["lista med rubriker för det inbäddade innehållet (frågor, problem, texter, etc.) som finns längre ner i planen"]
-  },
+  "title": "rolig, tydlig titel som beskriver vad lektionen handlar om",
+  "approach": "Vikarielektion (t.ex. quiz / par-arbete / stationsövning / kreativt projekt)",
+  "summary": "2 meningar: vad gör eleverna, och varför är det kul/meningsfullt",
+  "learningGoal": "vad eleverna befäster eller tränar (en mening)",
+  "priorKnowledge": "vad eleverna förväntas kunna (1 mening)",
+  "lgr22_connection": "kort koppling till ${curriculum} (1 mening)",
+  "successCriteria": ["2-3 enkla tecken på att lektionen lyckas"],
+  "boardLayout": "VERBATIM text vikarien skriver på tavlan INNAN eleverna kommer in. Agenda + nyckelbegrepp/exempel som lektionen refererar till. Använd \\n för radbrytningar. Inga platshållare.",
+  "projectorContent": "Om lektionen drar nytta av projektor: beskriv OM vikarien ska använda den och VAD som ska visas (t.ex. 'Sök på Wikipedia: [exakt sökterm]' eller 'Öppna [konkret URL]' eller 'Skriv dessa frågor i helskärm'). Skriv null om projektor inte behövs.",
+  "materialsNeeded": ["ENDAST klassrumsbasics: papper, pennor, tavla, ev. projektor. Max 4 punkter. Inga utskrifter, inget labbmaterial."],
   "phases": [
     {
       "name": "Fasens namn",
       "minutes": 10,
-      "purpose": "vad denna fas ska åstadkomma",
-      "teacherDoes": ["3-5 KONKRETA steg vikarien gör — skriv ut exakt vad vikarien säger och gör, steg för steg"],
-      "teacherScript": ["3-5 EXAKTA formuleringar i citattecken vikarien kan säga ordagrant. Inkludera övergångar och frågor."],
-      "studentsDo": ["2-4 konkreta beskrivningar av vad eleverna gör"],
-      "anticipatedResponses": ["2-3 troliga elevsvar (rätt + fel) och hur vikarien bemöter dem konkret"]
+      "purpose": "vad fasen åstadkommer (1 mening)",
+      "teacherDoes": ["Numrerade steg: '1. Skriv på tavlan: [text]', '2. Säg: [mening]', '3. Ge eleverna 8 min att [aktivitet]'. Korta, direkta, inga förklaringar."],
+      "teacherScript": ["Exakt vad vikarien säger (bara om detaljnivå kräver det)."],
+      "studentsDo": ["Vad eleverna gör — konkret och kortfattat."],
+      "anticipatedResponses": ["Troliga elevsvar + hur vikarien bemöter dem (bara om detaljnivå kräver det)."]
     }
   ] (3-5 faser, summa = ${duration} min),
   "embeddedContent": {
     "questions": [
-      { "q": "fullständig fråga", "expectedAnswer": "kort förväntat svar", "ifStuck": "tips till vikarien om eleverna inte svarar" }
-    ] (5-10 st om relevant — ALLTID inkludera om lektionen bygger på frågeställningar),
+      { "q": "fullständig fråga", "expectedAnswer": "kort svar", "ifStuck": "tips om eleverna fastnar" }
+    ],
     "problems": [
-      { "problem": "fullständig uppgift / fråga / tal", "answer": "fullständigt svar med kort förklaring", "difficulty": "lätt/medel/svår" }
-    ] (5-10 st om relevant — ALLTID inkludera för matematik, NO eller färdighetsövningar),
+      { "problem": "fullständig uppgift", "answer": "svar med kort förklaring", "difficulty": "lätt/medel/svår" }
+    ],
     "texts": [
-      { "title": "...", "content": "fullständig text på 50-200 ord som vikarien delar ut eller läser upp", "purpose": "vad eleverna ska göra med texten" }
-    ] (om relevant — för läsförståelse, diskussion, analys),
+      { "title": "titel", "content": "fullständig text, max 150 ord", "purpose": "vad eleverna ska göra med texten" }
+    ],
     "exampleAnswers": [
-      { "scenario": "om en elev säger X eller frågar Y", "response": "exakt vad vikarien kan svara" }
-    ] (3-5 st för svårare situationer)
-  } (Inkludera ENDAST de underfält som är relevanta — utelämn de andra. Men minst ett av questions/problems/texts MÅSTE vara med.),
+      { "scenario": "om en elev säger X", "response": "exakt vad vikarien svarar" }
+    ]
+  },
   "exitTicket": {
-    "title": "kort avslutande check",
-    "task": "konkret avslutande uppgift (t.ex. 'Skriv en mening: en sak du minns från idag')",
+    "title": "avslutande check",
+    "task": "konkret avslutande uppgift (1-2 meningar)",
     "purpose": "vad vikarien lämnar till ordinarie lärare"
   },
   "extraActivities": [
-    { "title": "...", "description": "konkret aktivitet på 5-15 min", "answer": "facit om relevant" }
-  ] (2-3 stycken),
+    { "title": "om tid över", "description": "konkret aktivitet, inga förberedelser krävs", "answer": "facit om relevant" }
+  ],
   "differentiation": {
-    "stod": ["3 konkreta stöttningsstrategier"],
-    "utmaning": ["3 konkreta utmaningar för snabba elever — ange exakt uppgift"]
+    "stod": ["2-3 enkla stöttningar"],
+    "utmaning": ["2-3 enkla utmaningar för snabba elever"]
   },
   "extraTime": [
     { "minutes": 5, "title": "...", "description": "...", "linkBack": "..." },
@@ -333,10 +347,10 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
     { "minutes": 15, "title": "...", "description": "...", "linkBack": "..." },
     { "minutes": 20, "title": "...", "description": "...", "linkBack": "..." }
   ],
-  "commonPitfalls": ["3-5 vanliga fallgropar SPECIFIKT för en vikarie i denna situation och vad man gör"],
-  "classroomManagement": ["3-5 specifika tips: hur man får tyst, hur man hanterar elever som inte vill delta, hur man skapar trygghet"],
-  "teacherNotes": ["2-4 övriga praktiska anmärkningar"],
-  "subTip": "Det viktigaste enskilda tipset till vikarien för just denna lektion (1 mening)"
+  "commonPitfalls": ["vanliga fallgropar för vikarie i denna situation"],
+  "classroomManagement": ["specifika tips: lugna ner, engagera, skapa trygghet"],
+  "teacherNotes": ["1-3 korta praktiska tips"],
+  "subTip": "Det viktigaste tipset till vikarien för just denna lektion (1 mening, max 20 ord)"
 }`;
 };
 
