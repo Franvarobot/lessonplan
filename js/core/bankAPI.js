@@ -36,6 +36,13 @@ async function _sbPatch(table, query, body) {
   if (!r.ok) { const e = await r.text(); throw new Error(`Supabase PATCH ${table} failed: ${r.status} ${e}`); }
   return r.json();
 }
+async function _sbDelete(table, query) {
+  const r = await fetch(_sbUrl(table, query), {
+    method: "DELETE", headers: _sbHeaders({ "Prefer": "return=minimal" }),
+  });
+  if (!r.ok) { const e = await r.text(); throw new Error(`Supabase DELETE ${table} failed: ${r.status} ${e}`); }
+  return true;
+}
 
 // ---- bankAPI ----
 window.bankAPI = {
@@ -54,7 +61,7 @@ window.bankAPI = {
     );
   },
 
-  // Fuzzy match via similarityRatio — returns pool lessons sorted by similarity.
+  // Fuzzy match via similarityRatio
   findSimilar({ stage, grade, subject, topic, isSub = false, threshold = 0.45 }) {
     const pool = this.getActivePool({ stage, grade, subject, isSub });
     return pool
@@ -64,10 +71,8 @@ window.bankAPI = {
       .map(x => x.lesson);
   },
 
-  // Returns the single best cached match if similarity >= 0.55 (serve from DB).
   findBestMatch({ stage, grade, subject, topic, isSub = false }) {
     const results = this.findSimilar({ stage, grade, subject, topic, isSub, threshold: 0.55 });
-    // Prefer highest-rated if multiple good matches
     return results.sort((a, b) => (b._avgRating ?? -1) - (a._avgRating ?? -1))[0] || null;
   },
 
@@ -102,14 +107,12 @@ window.bankAPI = {
     const rows = await _sbGet("lessons", "status=eq.active&order=created_at.desc");
     const lessons = rows.map(r => ({ ...r, lesson: r.lesson_json }));
     window.saveBankCache({ lessons, fetchedAt: Date.now() });
-    // Fetch ratings and inject into cache
     await window.qualityAPI.fetchRatings();
     return lessons;
   },
 
   async addLesson(_url, { schoolId, stage, grade, subject, topic, title, duration, lesson, provider, model }) {
     const isSub = !!(lesson && lesson.isSub);
-    // Server-side pool check (separate teacher vs sub counter)
     const poolRows = await _sbGet("lessons",
       `stage=eq.${encodeURIComponent(stage)}&grade=eq.${encodeURIComponent(grade)}&subject=eq.${encodeURIComponent(subject)}&status=eq.active&is_sub=eq.${isSub}&select=lesson_id`
     );
@@ -151,11 +154,13 @@ window.bankAPI = {
 // ---- schoolsAPI ----
 window.schoolsAPI = {
   all() { return window.loadSchoolsCache(); },
+
   async refresh() {
     const rows = await _sbGet("schools", "order=created_at.desc");
     window.saveSchoolsCache(rows);
     return rows;
   },
+
   async create(_url, name) {
     const [created] = await _sbPost("schools", { name });
     const list = window.loadSchoolsCache();
@@ -164,6 +169,26 @@ window.schoolsAPI = {
       window.saveSchoolsCache(list);
     }
     return { ok: true, schoolId: created.school_id, name: created.name };
+  },
+
+  // ── NEW: rename a school ──────────────────────────────────────────────────
+  async rename(schoolId, newName) {
+    await _sbPatch("schools", `school_id=eq.${encodeURIComponent(schoolId)}`, { name: newName });
+    // Update local cache immediately so the UI reflects the change without a full refresh
+    const list = window.loadSchoolsCache();
+    const rec = list.find(s => s.school_id === schoolId);
+    if (rec) { rec.name = newName; window.saveSchoolsCache(list); }
+    return { ok: true };
+  },
+
+  // ── NEW: delete a school ──────────────────────────────────────────────────
+  // Note: this only removes the school registry entry. Lessons created by
+  // that school remain in the bank (they are shared and may be in use by others).
+  async remove(schoolId) {
+    await _sbDelete("schools", `school_id=eq.${encodeURIComponent(schoolId)}`);
+    const list = window.loadSchoolsCache().filter(s => s.school_id !== schoolId);
+    window.saveSchoolsCache(list);
+    return { ok: true };
   },
 };
 
@@ -195,7 +220,6 @@ window.qualityAPI = {
       lesson_id: lessonId, school_id: schoolId || null,
       rating: clamped, notes: notes || null,
     });
-    // Optimistic update in cache
     const cache = window.loadBankCache();
     const rec = cache.lessons.find(l => l.lesson_id === lessonId);
     if (rec) {
@@ -229,7 +253,6 @@ window.qualityAPI = {
     }
   },
 
-  // Active lessons sorted by avg rating desc, filtered by type
   topRated({ isSub = false } = {}) {
     return window.bankAPI.active()
       .filter(l => !!l.is_sub === isSub)
