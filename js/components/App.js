@@ -81,13 +81,11 @@ function App() {
     try { localStorage.setItem(window.STORAGE_KEY, JSON.stringify(next)); } catch {}
   };
 
-  // ---- Bank refresh on mount and Apps Script URL change ----
+  // ---- Bank refresh on mount ----
   const refreshBank = async () => {
-    const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
-    if (!url) return;
     setBankLoading(true); setBankError("");
     try {
-      await window.bankAPI.refresh(url);
+      await window.bankAPI.refresh();
     } catch (e) {
       console.error("Bank refresh failed", e);
       setBankError(String(e.message || e));
@@ -98,13 +96,11 @@ function App() {
   useEffect_app(() => {
     refreshBank();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.appsScriptUrl]);
+  }, []);
 
   // ---- Schools refresh; force-show picker if no school set yet ----
   const refreshSchools = async () => {
-    const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
-    if (!url) return;
-    try { await window.schoolsAPI.refresh(url); } catch (e) { console.error("Schools refresh failed", e); }
+    try { await window.schoolsAPI.refresh(); } catch (e) { console.error("Schools refresh failed", e); }
   };
   useEffect_app(() => {
     (async () => {
@@ -113,15 +109,14 @@ function App() {
       if (!known) setShowSchoolPicker(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.appsScriptUrl]);
+  }, []);
 
   const handleSelectSchool = (school) => {
     saveConfig({ ...config, schoolId: school.school_id, schoolName: school.name });
     setShowSchoolPicker(false);
   };
   const handleCreateSchool = async (name) => {
-    const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
-    return await window.schoolsAPI.create(url, name);
+    return await window.schoolsAPI.create(null, name);
   };
 
   // ---- Reset cascading inputs ----
@@ -131,7 +126,6 @@ function App() {
   useEffect_app(() => { setTopicSuggestions([]); }, [config.language]);
 
   // ---- Translate current lesson when language toggles ----
-  // Use a ref to avoid stale-closure issues.
   const translateRef = useRef_app(null);
   const firstLangRender = useRef_app(true);
   useEffect_app(() => {
@@ -172,6 +166,18 @@ function App() {
   const canGenerate = stage && grade && subject && topic.trim() && hasKey;
   const canSuggestTopics = stage && grade && subject && hasKey;
 
+  // ---- Helper: get current provider/model ----
+  const currentProviderModel = () => {
+    const p = config.provider;
+    let model = "";
+    if (p === "gemini") model = config.geminiModel;
+    else if (p === "anthropic") model = config.anthropicModel;
+    else if (p === "openai") model = config.openaiModel;
+    else if (p === "grok") model = config.grokModel;
+    else if (p === "local") model = config.localModel;
+    return { provider: p, model };
+  };
+
   // ---- Topic suggestions ----
   const suggestTopics = async (append = false) => {
     if (!canSuggestTopics) return;
@@ -208,13 +214,13 @@ function App() {
         window.lessonPrompt({ stage, grade, subject, topic, duration, branchIndex: 0, totalBranches: 1, language: "sv", detailLevel })
       );
       result.translations = { sv: { ...result } };
-      const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
+      const { provider, model } = currentProviderModel();
       let record;
       try {
-        record = await window.bankAPI.addLesson(url, {
+        record = await window.bankAPI.addLesson(null, {
           schoolId: config.schoolId || "school-1",
           stage, grade, subject, topic, title: result.title || topic,
-          duration, lesson: result,
+          duration, lesson: result, provider, model,
         });
       } catch (e) {
         if (e.code === "pool_full") {
@@ -239,7 +245,7 @@ function App() {
     }
   };
 
-  // ---- Generate one extra (cached per lesson, per kind) ----
+  // ---- Generate one extra (check DB first, then generate and cache) ----
   const generateExtra = async (lesson, kind) => {
     if (!lesson || !hasKey) return;
     const cacheKey = `${lesson.id}:${kind}`;
@@ -247,10 +253,20 @@ function App() {
     if (loadingExtras[cacheKey]) return;
     setLoadingExtras(s => ({ ...s, [cacheKey]: true }));
     try {
+      // Check DB first
+      const cached = await window.extrasAPI.get({ lessonId: lesson.id, kind, language: config.language });
+      if (cached) {
+        setExtrasCache(c => ({ ...c, [cacheKey]: cached }));
+        return;
+      }
+      // Generate via LLM
       const result = await window.runLLM(config,
         window.extrasPrompt({ kind, lesson, stage, grade, subject, topic, duration, language: config.language })
       );
       setExtrasCache(c => ({ ...c, [cacheKey]: result }));
+      // Persist to DB
+      const { provider, model } = currentProviderModel();
+      window.extrasAPI.save({ lessonId: lesson.id, kind, language: config.language, content: result, provider, model });
     } catch (e) {
       setExtrasCache(c => ({ ...c, [cacheKey]: { _error: e.message } }));
     } finally {
@@ -289,58 +305,27 @@ function App() {
       room: acceptedLesson.ctx?.room || ctxRoom,
     };
     window.lessonLibrary.addUsage({ lessonId: acceptedLesson.id, used });
-    const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
-    if (url) {
-      try {
-        await window.postToAppsScript(url, {
-          type: "usage",
-          schoolId: config.schoolId || "school-1",
-          lessonId: acceptedLesson.id,
-          title: acceptedLesson.title,
-          stage: rec?.stage, grade: rec?.grade, subject: rec?.subject, topic: rec?.topic,
-          ...used,
-        });
-        await window.bankAPI.archive(url, acceptedLesson.id, config.schoolId || "school-1");
-        return { ok: true, synced: true };
-      } catch (e) {
-        console.error("Apps Script sync failed", e);
-        return { ok: true, synced: false };
-      }
+    try {
+      await window.bankAPI.archive(null, acceptedLesson.id, config.schoolId || "school-1");
+      return { ok: true, synced: true };
+    } catch (e) {
+      console.error("Archive failed", e);
+      return { ok: true, synced: false };
     }
-    return { ok: true, synced: false };
   };
 
-  // ---- Submit sub feedback (local + remote log) ----
+  // ---- Submit sub feedback ----
   const submitLessonFeedback = async ({ subName, text }) => {
     if (!acceptedLesson?.id) return { ok: false };
-    const rec = window.bankAPI.byId(acceptedLesson.id);
-    const feedback = { subName, text };
-    window.lessonLibrary.addFeedback({ lessonId: acceptedLesson.id, feedback });
-    const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
-    if (url) {
-      try {
-        await window.postToAppsScript(url, {
-          type: "feedback",
-          schoolId: config.schoolId || "school-1",
-          lessonId: acceptedLesson.id,
-          title: acceptedLesson.title,
-          stage: rec?.stage, grade: rec?.grade, subject: rec?.subject, topic: rec?.topic,
-          ...feedback,
-        });
-        return { ok: true, synced: true };
-      } catch (e) {
-        console.error("Apps Script sync failed", e);
-        return { ok: true, synced: false };
-      }
-    }
+    window.lessonLibrary.addFeedback({ lessonId: acceptedLesson.id, feedback: { subName, text } });
+    // No remote sync needed — Supabase archive handles this via usage_log
     return { ok: true, synced: false };
   };
 
   // ---- Manual archive (bank-wide) ----
   const archiveLessonInBank = async (id) => {
-    const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
     try {
-      await window.bankAPI.archive(url, id, config.schoolId || "school-1");
+      await window.bankAPI.archive(null, id, config.schoolId || "school-1");
     } catch (e) {
       console.error("Archive failed", e);
     }
@@ -350,18 +335,13 @@ function App() {
   const openPoolLesson = (id) => loadLessonFromBank(id);
 
   // ---- Translate lesson on-demand and cache result ----
-  // Always translates FROM the Swedish source (translations.sv), never from
-  // an already-translated version. Caches result so toggle back/forth is instant.
   const translateAndApplyLesson = async (lessonId, targetLang) => {
     if (!lessonId) return;
     const rec = window.bankAPI.byId(lessonId);
     if (!rec) return;
-    // Always use Swedish as the source of truth.
-    // Strip the translations key before sending to avoid circular JSON.
     const fullLesson = rec.lesson?.translations?.sv || rec.lesson;
     const { translations: _drop, ...sourceLesson } = fullLesson;
 
-    // Check cache for this language.
     const existing = rec.lesson?.translations?.[targetLang];
     if (existing) {
       setAcceptedLesson(prev => prev && prev.id === lessonId
@@ -393,7 +373,7 @@ function App() {
   };
   translateRef.current = (id, lang) => translateAndApplyLesson(id, lang);
 
-  // ---- Generate substitute lesson (optionally standalone) ----
+  // ---- Generate substitute lesson ----
   const generateSub = async ({ standalone = false } = {}) => {
     if (!hasKey) return;
     if (!standalone && !acceptedLesson) return;
@@ -418,13 +398,13 @@ function App() {
       );
       if (standalone) {
         result.translations = { sv: { ...result } };
-        const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
+        const { provider, model } = currentProviderModel();
         let record;
         try {
-          record = await window.bankAPI.addLesson(url, {
+          record = await window.bankAPI.addLesson(null, {
             schoolId: config.schoolId || "school-1",
             stage, grade, subject, topic, title: result.title || topic,
-            duration, lesson: { ...result, isSub: true },
+            duration, lesson: { ...result, isSub: true }, provider, model,
           });
         } catch (e) {
           if (e.code === "pool_full") {
@@ -591,8 +571,7 @@ function App() {
           onClose={() => setShowPoolFull(false)}
           onOpen={(id) => openPoolLesson(id)}
           onArchiveAndGenerate={async (id) => {
-            const url = config.appsScriptUrl || window.DEFAULT_APPS_SCRIPT_URL;
-            try { await window.bankAPI.archive(url, id, config.schoolId || "school-1"); } catch (e) { console.error(e); }
+            try { await window.bankAPI.archive(null, id, config.schoolId || "school-1"); } catch (e) { console.error(e); }
             setShowPoolFull(false);
             setTimeout(() => generateLesson(), 0);
           }}

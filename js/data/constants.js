@@ -5,7 +5,7 @@
 // bumping the public version number.
 // ============================================================
 
-window.APP_VERSION = "1.6.0";
+window.APP_VERSION = "1.7.0";
 
 // localStorage keys
 window.STORAGE_KEY = "lektionsplaneraren-v1";
@@ -16,9 +16,12 @@ window.SCHOOLS_CACHE_KEY = "lektionsplaneraren-schools-cache-v1";
 // Maximum number of active lessons per (stage|grade|subject) slot in the bank.
 window.ACTIVE_POOL_LIMIT = 3;
 
-// Default Apps Script Web App URL (Google Sheets sync). Empty = sync disabled
-// unless the user provides their own URL in Settings.
-window.DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDECns-5gAccF-NnzHLoexBQwiCuEXtSQT1z00WEH-x3sFIpWjsuAGdiIuwz48LutN/exec";
+// ============================================================
+// Supabase backend (replaces Google Apps Script)
+// The anon key is safe to expose in browser code.
+// ============================================================
+window.SUPABASE_URL = "https://frfebixakocexxyservf.supabase.co";
+window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZmViaXhha29jZXh4eXNlcnZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NjUyMDgsImV4cCI6MjA5NDI0MTIwOH0.DLerdFjEVMWxvnZhwQYbl9UVFvLNOvkkWAW65YWeyUY";
 
 // ============================================================
 // LGR22 / Gy22 curriculum — STAGES and SUBJECTS
@@ -99,6 +102,5 @@ window.DEFAULT_CONFIG = {
   localKey: "",
   localModel: "local-model",
   language: "sv",
-  appsScriptUrl: "",
   schoolId: "school-1",
 };
