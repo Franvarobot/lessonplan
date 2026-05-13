@@ -142,10 +142,16 @@ Exempel på fantomreferenser som FÖRSTÖR planen:
 - "Hänvisa till regeln vi gick igenom" — vilken regel? Citera den.
 
 REGEL: Om planen nämner ETT objekt (en lista, en text, en bild, en ordlista, en formel, en regel, ett exempel, en "bank", en "anslagstavla") måste EN av följande gälla:
-(a) Innehållet är skrivet ordagrant i planen (i "boardSetup" eller "teacherScript" eller motsvarande fält), ELLER
+(a) Innehållet är skrivet ordagrant i planen, ELLER
 (b) En tidigare fas innehåller EXPLICITA steg för att skapa det, MED INNEHÅLLET (t.ex. "Skriv följande 8 adjektiv på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd.").
 
-INNAN du skriver phases, fundera: "Vilket konkret material/innehåll behöver läraren ha redo på tavlan eller i handen?" — och PRODUCERA det innehållet i fältet "boardSetup" eller i den första fasens teacherDoes/teacherScript.
+INNAN du skriver phases, fundera: "Vilket konkret material/innehåll behöver läraren ha redo på tavlan eller i handen?" — och producera det innehållet ordagrant i planen.
+
+🚫 ABSOLUT FÖRBJUDET — JSON-FÄLTNAMN I LÄRARENS INSTRUKTIONER 🚫
+Alla instruktioner i "teacherDoes" ska vara NATURLIGT SPRÅK. Du får ALDRIG använda tekniska JSON-fältnamn (som "boardLayout", "embeddedContent", "teacherScript", "phases" etc.) i texten som läraren ska läsa. Skriv istället vad läraren FAKTISKT SKA GÖRA.
+- ❌ "Write out boardLayout on the board" → ✅ "Skriv följande på tavlan: [konkret text]"
+- ❌ "Read questions from embeddedContent" → ✅ "Läs upp fråga 1: '[frågetext]'"
+- ❌ "Follow the teacherScript" → ✅ "Säg: '[konkret mening]'"
 
 ${langInstr}
 
@@ -248,15 +254,24 @@ EXTRA viktigt för en vikarie utan ämneskunskap. Du får ALDRIG referera till n
 
 FÖRBJUDNA formuleringar (och vad du ska skriva istället):
 - ❌ "Peka på Adjektivbanken på tavlan"
-  ✅ Lägg en första fas "Förberedelse" där vikarien skriver: "Innan eleverna kommer in: Skriv följande på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd."
+  ✅ Skriv istället en förberedelsefas: "Innan eleverna kommer in: Skriv följande på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd."
 - ❌ "Hänvisa till texten ni läste förra gången"
-  ✅ "Den text eleverna läste förra lektionen handlade om X. Påminn dem genom att säga: '...'. Texten finns inte här — om eleverna behöver återblicka, säg: '...'."
+  ✅ Skriv istället: "Den text eleverna läste förra lektionen handlade om X. Påminn dem genom att säga: '...'"
 - ❌ "Eleverna gör övning 3 i boken"
-  ✅ Skriv ut hela övningen ordagrant i embeddedContent.problems med facit.
+  ✅ Skriv ut hela övningen ordagrant med alla frågor/tal och facit direkt i planen.
 - ❌ "Använd bilden ni jobbat med"
   ✅ Beskriv bilden i ord eller skriv "Vikarien har INGEN bild — använd istället denna beskrivning: '...'."
 
-REGEL: Innan du skriver phases, lista alla föremål/innehåll som vikarien kommer att referera till. För VARJE sådant: antingen lägg in en "Förberedelse"-fas (med innehållet skrivet ordagrant), eller embedda innehållet i embeddedContent. Om vikarien inte kan utföra ett steg utan att förstå ämnet — då har du misslyckats.
+🚫 ABSOLUT FÖRBJUDET — JSON-FÄLTNAMN I LÄRARENS INSTRUKTIONER 🚫
+Lärarens/vikariens instruktioner i "teacherDoes" ska vara NATURLIGT SPRÅK som en människa kan följa. Du får ALDRIG använda tekniska fältnamn från JSON-schemat (som "boardLayout", "embeddedContent", "teacherScript", "anticipatedResponses" etc.) i texten. Skriv istället vad läraren FAKTISKT SKA GÖRA.
+- ❌ "Write out boardLayout on the board"
+  ✅ "Skriv följande på tavlan: [konkret text]"
+- ❌ "Read questions from embeddedContent"
+  ✅ "Läs upp fråga 1: 'Vad betyder ordet vän på engelska?'"
+- ❌ "Follow the teacherScript"
+  ✅ "Säg: 'Hej allihop! Idag ska vi...'"
+
+REGEL: Innan du skriver phases, lista alla föremål/innehåll som vikarien kommer att referera till. För VARJE sådant: antingen lägg in en "Förberedelse"-fas (med innehållet skrivet ordagrant), eller skriv ut det fullständiga innehållet direkt i fasens instruktioner. Om vikarien inte kan utföra ett steg utan att förstå ämnet — då har du misslyckats.
 
 ${langInstr}
 
@@ -280,7 +295,7 @@ Svara endast med ett giltigt JSON-objekt, ingen markdown:
       "name": "Fasens namn",
       "minutes": 10,
       "purpose": "vad denna fas ska åstadkomma",
-      "teacherDoes": ["3-5 KONKRETA steg vikarien gör — peka på var i planen man hittar materialet"],
+      "teacherDoes": ["3-5 KONKRETA steg vikarien gör — skriv ut exakt vad vikarien säger och gör, steg för steg"],
       "teacherScript": ["3-5 EXAKTA formuleringar i citattecken vikarien kan säga ordagrant. Inkludera övergångar och frågor."],
       "studentsDo": ["2-4 konkreta beskrivningar av vad eleverna gör"],
       "anticipatedResponses": ["2-3 troliga elevsvar (rätt + fel) och hur vikarien bemöter dem konkret"]
