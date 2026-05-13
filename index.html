@@ -10,23 +10,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/styles.css" />
 
-<!-- React + Babel via CDN. No build step. -->
+<!-- React + Babel via CDN. No build step.
+     Pinned to Babel 7.23.2 — later versions inject _excluded helpers into
+     every script tag independently, causing "already declared" crashes when
+     multiple JSX files use object spread in the same global scope. -->
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
-
-<script>
-// Tell Babel to use classic JSX runtime and externalHelpers so helper
-// functions like _excluded are not re-declared in every script tag.
-Babel.registerPreset("app-preset", {
-  presets: [
-    [Babel.availablePresets["react"], { runtime: "classic" }]
-  ],
-  plugins: [
-    [Babel.availablePlugins["transform-object-rest-spread"], { useBuiltIns: true }]
-  ]
-});
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.2/babel.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -54,16 +44,16 @@ Babel.registerPreset("app-preset", {
 <script src="js/core/prompts.js"></script>
 
 <!-- 6. UI primitives and components (all have JSX) -->
-<script type="text/babel" data-presets="app-preset" src="js/components/Icon.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/SettingsModal.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/SchoolPicker.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/BankView.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/LessonCard.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/ExtrasTabs.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/LessonCardWithTabs.js"></script>
-<script type="text/babel" data-presets="app-preset" src="js/components/DetailExtrasControls.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/Icon.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/SettingsModal.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/SchoolPicker.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/BankView.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/LessonCard.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/ExtrasTabs.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/LessonCardWithTabs.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/DetailExtrasControls.js"></script>
 
 <!-- 7. Main App (mounts to #root) -->
-<script type="text/babel" data-presets="app-preset" src="js/components/App.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/App.js"></script>
 </body>
 </html>
