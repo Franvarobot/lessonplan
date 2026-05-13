@@ -139,12 +139,20 @@ function App() {
       firstLangRender.current = false;
       return;
     }
-    // Clear extras cache + loading flags + active tab — keyed to previous lesson id/lang.
+    // Clear extras cache and loading flags - extras are language-specific.
     setExtrasCache({});
     setLoadingExtras({});
-    setActiveTab({});
-    if (acceptedLesson && translateRef.current) {
-      translateRef.current(acceptedLesson.id, config.language);
+    if (acceptedLesson) {
+      if (config.language === "sv") {
+        // Toggling back to Swedish: pull from bank cache directly, no LLM call.
+        const rec = window.bankAPI.byId(acceptedLesson.id);
+        const svLesson = rec?.lesson?.translations?.sv || rec?.lesson;
+        if (svLesson) {
+          setAcceptedLesson(prev => prev ? { ...svLesson, id: prev.id, isSub: prev.isSub, ctx: prev.ctx } : prev);
+        }
+      } else if (translateRef.current) {
+        translateRef.current(acceptedLesson.id, config.language);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.language]);
@@ -342,11 +350,18 @@ function App() {
   const openPoolLesson = (id) => loadLessonFromBank(id);
 
   // ---- Translate lesson on-demand and cache result ----
+  // Always translates FROM the Swedish source (translations.sv), never from
+  // an already-translated version. Caches result so toggle back/forth is instant.
   const translateAndApplyLesson = async (lessonId, targetLang) => {
-    if (!lessonId || targetLang === "sv") return;
+    if (!lessonId) return;
     const rec = window.bankAPI.byId(lessonId);
     if (!rec) return;
-    const sourceLesson = rec.lesson?.translations?.sv || rec.lesson;
+    // Always use Swedish as the source of truth.
+    // Strip the translations key before sending to avoid circular JSON.
+    const fullLesson = rec.lesson?.translations?.sv || rec.lesson;
+    const { translations: _drop, ...sourceLesson } = fullLesson;
+
+    // Check cache for this language.
     const existing = rec.lesson?.translations?.[targetLang];
     if (existing) {
       setAcceptedLesson(prev => prev && prev.id === lessonId
@@ -357,6 +372,7 @@ function App() {
     setTranslating(true);
     try {
       const result = await window.runLLM(config, window.translateLessonPrompt({ lesson: sourceLesson, targetLanguage: targetLang }));
+      // Cache on the bank record so subsequent toggles are instant.
       const cache = window.loadBankCache();
       const cached = cache.lessons.find(l => l.lesson_id === lessonId);
       if (cached) {
@@ -597,22 +613,11 @@ function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
-  <Icon name="key" size={12} />
-  <span>
-    {window.providerDisplayName(config.provider, config.language)}
-    {(() => {
-      const m = config.provider === "gemini" ? config.geminiModel
-              : config.provider === "anthropic" ? config.anthropicModel
-              : config.provider === "openai" ? config.openaiModel
-              : config.provider === "grok" ? config.grokModel
-              : config.provider === "local" ? config.localModel
-              : "";
-      return m ? <span style={{ marginLeft: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>· {m}</span> : null;
-    })()}
-  </span>
-  {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
-  {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
-</div>
+              <Icon name="key" size={12} />
+              <span>{window.providerDisplayName(config.provider, config.language)}</span>
+              {!hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8C547" }} />}
+              {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success-text)" }} />}
+            </div>
             <LangToggle value={config.language} onChange={(lng) => saveConfig({ ...config, language: lng })} />
             {config.schoolName && (
               <button onClick={() => setShowSchoolPicker(true)}
