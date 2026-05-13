@@ -14,6 +14,19 @@
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
+
+<script>
+// Tell Babel to use classic JSX runtime and externalHelpers so helper
+// functions like _excluded are not re-declared in every script tag.
+Babel.registerPreset("app-preset", {
+  presets: [
+    [Babel.availablePresets["react"], { runtime: "classic" }]
+  ],
+  plugins: [
+    [Babel.availablePlugins["transform-object-rest-spread"], { useBuiltIns: true }]
+  ]
+});
+</script>
 </head>
 <body>
 <div id="root"></div>
@@ -21,8 +34,6 @@
 <!--
   Load order matters. Each file attaches its exports to `window.X`.
   Files without JSX use plain <script>; files with JSX use type="text/babel".
-  Files that touch React (hooks etc.) but contain no JSX still need to load
-  AFTER the React CDN scripts above (they do — these are all below it).
 -->
 
 <!-- 1. Data layer (pure constants, no React) -->
@@ -43,16 +54,16 @@
 <script src="js/core/prompts.js"></script>
 
 <!-- 6. UI primitives and components (all have JSX) -->
-<script type="text/babel" data-presets="react" src="js/components/Icon.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/SettingsModal.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/SchoolPicker.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/BankView.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/LessonCard.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/ExtrasTabs.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/LessonCardWithTabs.js"></script>
-<script type="text/babel" data-presets="react" src="js/components/DetailExtrasControls.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/Icon.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/SettingsModal.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/SchoolPicker.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/BankView.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/LessonCard.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/ExtrasTabs.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/LessonCardWithTabs.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/DetailExtrasControls.js"></script>
 
 <!-- 7. Main App (mounts to #root) -->
-<script type="text/babel" data-presets="react" src="js/components/App.js"></script>
+<script type="text/babel" data-presets="app-preset" src="js/components/App.js"></script>
 </body>
 </html>
