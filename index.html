@@ -10,40 +10,44 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/styles.css" />
 
-<!-- React + Babel via CDN. No build step.
-     Pinned to Babel 7.23.2 — later versions inject _excluded helpers into
-     every script tag independently, causing "already declared" crashes when
-     multiple JSX files use object spread in the same global scope. -->
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
+
+<script>
+// Fix: Babel standalone injects helper vars like `_excluded` as `var` declarations
+// at the top of each transpiled script. Since all text/babel scripts share the
+// same window scope, the second script to use object rest spread crashes with
+// "Identifier _excluded has already been declared". 
+// Patch: wrap Babel.transform output in an IIFE so helpers stay scoped.
+(function() {
+  const _originalTransform = Babel.transform.bind(Babel);
+  Babel.transform = function(code, options) {
+    const result = _originalTransform(code, options);
+    return {
+      ...result,
+      code: '(function() {\n' + result.code + '\n})();',
+    };
+  };
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>
 
-<!--
-  Load order matters. Each file attaches its exports to `window.X`.
-  Files without JSX use plain <script>; files with JSX use type="text/babel".
--->
-
-<!-- 1. Data layer (pure constants, no React) -->
+<!-- 1. Data layer -->
 <script src="js/data/constants.js"></script>
-
-<!-- 2. Pure helpers (no React) -->
+<!-- 2. Helpers -->
 <script src="js/utils/helpers.js"></script>
-
-<!-- 3. i18n (no React) -->
+<!-- 3. i18n -->
 <script src="js/utils/i18n.js"></script>
-
-<!-- 4. Storage (uses React hooks, no JSX) -->
+<!-- 4. Storage -->
 <script src="js/utils/storage.js"></script>
-
-<!-- 5. API + data APIs (no React, no JSX) -->
+<!-- 5. Core APIs -->
 <script src="js/core/api.js"></script>
 <script src="js/core/bankAPI.js"></script>
 <script src="js/core/prompts.js"></script>
-
-<!-- 6. UI primitives and components (all have JSX) -->
+<!-- 6. Components -->
 <script type="text/babel" data-presets="react" src="js/components/Icon.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SettingsModal.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SchoolPicker.js"></script>
@@ -52,8 +56,7 @@
 <script type="text/babel" data-presets="react" src="js/components/ExtrasTabs.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/LessonCardWithTabs.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/DetailExtrasControls.js"></script>
-
-<!-- 7. Main App (mounts to #root) -->
+<!-- 7. App -->
 <script type="text/babel" data-presets="react" src="js/components/App.js"></script>
 </body>
 </html>
