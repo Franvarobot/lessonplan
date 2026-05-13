@@ -5,49 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Lektionsplaneraren</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232B5F8B'/%3E%3Cpath fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M14 18h14a6 6 0 0 1 6 6v24a4 4 0 0 0-4-4H14zM50 18H36a6 6 0 0 0-6 6v24a4 4 0 0 1 4-4h16z'/%3E%3C/svg%3E" />
-
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/styles.css" />
 
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
 
 <script>
-// Fix: Babel standalone injects helper vars like `_excluded` as `var` declarations
-// at the top of each transpiled script. Since all text/babel scripts share the
-// same window scope, the second script to use object rest spread crashes with
-// "Identifier _excluded has already been declared". 
-// Patch: wrap Babel.transform output in an IIFE so helpers stay scoped.
+// Babel injects `var _excluded` into every transpiled script that uses object
+// rest spread. Since all text/babel scripts share window scope, the second file
+// to load crashes with "already declared". Fix: intercept head.appendChild
+// BEFORE Babel loads, and wrap any injected script text in an IIFE.
 (function() {
-  const _originalTransform = Babel.transform.bind(Babel);
-  Babel.transform = function(code, options) {
-    const result = _originalTransform(code, options);
-    return {
-      ...result,
-      code: '(function() {\n' + result.code + '\n})();',
-    };
+  var head = document.getElementsByTagName('head')[0];
+  var _orig = head.appendChild.bind(head);
+  head.appendChild = function(el) {
+    if (el.tagName === 'SCRIPT' && el.text && !el.src &&
+        (el.text.indexOf('React.createElement') !== -1 || el.text.indexOf('_excluded') !== -1)) {
+      el.text = '(function(){\n' + el.text + '\n})();';
+    }
+    return _orig(el);
   };
 })();
 </script>
+
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
 
-<!-- 1. Data layer -->
 <script src="js/data/constants.js"></script>
-<!-- 2. Helpers -->
 <script src="js/utils/helpers.js"></script>
-<!-- 3. i18n -->
 <script src="js/utils/i18n.js"></script>
-<!-- 4. Storage -->
 <script src="js/utils/storage.js"></script>
-<!-- 5. Core APIs -->
 <script src="js/core/api.js"></script>
 <script src="js/core/bankAPI.js"></script>
 <script src="js/core/prompts.js"></script>
-<!-- 6. Components -->
+
 <script type="text/babel" data-presets="react" src="js/components/Icon.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SettingsModal.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SchoolPicker.js"></script>
@@ -56,7 +51,6 @@
 <script type="text/babel" data-presets="react" src="js/components/ExtrasTabs.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/LessonCardWithTabs.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/DetailExtrasControls.js"></script>
-<!-- 7. App -->
 <script type="text/babel" data-presets="react" src="js/components/App.js"></script>
 </body>
 </html>
