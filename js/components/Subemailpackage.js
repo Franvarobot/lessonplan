@@ -8,8 +8,8 @@
 
 const { useState: useState_email, useMemo: useMemo_email } = React;
 
-window.SubEmailPackage = function SubEmailPackage({ lesson, stage, grade, subject, topic, duration, t, onClose }) {
-  const isSv = (t.language !== "en");
+window.SubEmailPackage = function SubEmailPackage({ lesson, stage, grade, subject, topic, duration, language = "sv", t, onClose }) {
+  const isSv = (language !== "en");
 
   // Admin preflight fields
   const [subEmail,   setSubEmail]   = useState_email("");
