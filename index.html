@@ -13,9 +13,6 @@
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 
 <script>
-// Babel injects `var _excluded` into every transpiled script that uses object
-// rest spread. Since all text/babel scripts share window scope, the second file
-// to load crashes with "already declared". Fix: wrap injected script text in an IIFE.
 (function() {
   var head = document.getElementsByTagName('head')[0];
   var _orig = head.appendChild.bind(head);
@@ -44,6 +41,8 @@
 
 <script type="text/babel" data-presets="react" src="js/components/Icon.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SubGenerationAnimation.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/SubEmailPackage.js"></script>
+<script type="text/babel" data-presets="react" src="js/components/FillerBank.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SettingsModal.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/SchoolPicker.js"></script>
 <script type="text/babel" data-presets="react" src="js/components/BankView.js"></script>
