@@ -507,7 +507,10 @@ function App() {
           </div>
         )}
 
-        {renderForm()}
+        {pageTab === "filler"
+          ? (window.FillerBankView && <window.FillerBankView config={config} onClose={() => setPageTab("teacher")} />)
+          : renderForm()
+        }
 
         {error && (
           <div style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-text)", borderRadius: "var(--radius-md)", padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "var(--danger-text)", display: "flex", gap: 10 }}>
@@ -515,7 +518,7 @@ function App() {
           </div>
         )}
 
-        {acceptedLesson && (
+        {acceptedLesson && pageTab !== "filler" && (
           <div style={{ marginBottom: 16 }}>
             <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
