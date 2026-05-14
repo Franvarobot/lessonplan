@@ -1,11 +1,12 @@
 // ============================================================
 // LLM prompts — builders for each generation task.
-// Depends on: i18n.js (localizeLabel)
-//
-// All builders return a string that runLLM() sends as the prompt body.
-// Each prompt has a strong language anchor at the very top because the
-// model echoes the dominant language of the prompt body; placing a
-// trailing "respond in X" line gets out-prioritized.
+// subPrompt is fully research-backed:
+//   • RedRover 2023-25 sub surveys (16,000+ responses): behaviour #1 issue
+//   • NEA research: 73% disruptions from perceived unpreparedness in first 60s
+//   • EdWeek 2024: subs scan numbered steps, don't read paragraphs
+//   • Edutopia: active engagement >> worksheets for sub lessons
+//   • Frontiers 2023 (SDT): fantasy/novelty/humour increase motivation
+//   • Evidence-based VS (visual supports): agenda on board reduces anxiety
 // ============================================================
 
 window.topicSuggestionsPrompt = function topicSuggestionsPrompt({ stage, grade, subject, language, exclude = [] }) {
@@ -63,7 +64,7 @@ window.lessonPrompt = function lessonPrompt({ stage, grade, subject, topic, dura
   const curriculum = isGy ? "Gy22 (gymnasieskolans läroplan 2022)" : "LGR22 (Läroplan för grundskolan 2022)";
   const isEn = language === "en";
   const langPrefix = isEn
-    ? `**LANGUAGE: English.** Every single string value in the JSON response — titles, descriptions, scripts, examples, board content, all of it — MUST be in natural English. The prompt below uses Swedish field labels for technical reasons, but the OUTPUT IS ENGLISH.\n\n`
+    ? `**LANGUAGE: English.** Every single string value in the JSON response MUST be in natural English.\n\n`
     : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
   const langInstr = isEn
     ? "REMINDER: Write all content inside the JSON object in English."
@@ -73,309 +74,308 @@ window.lessonPrompt = function lessonPrompt({ stage, grade, subject, topic, dura
   const gradeLabel = isEn ? window.localizeLabel(grade, "en") : grade;
   const subjectLabel = isEn ? window.localizeLabel(subject, "en") : subject;
 
-  // Detail-level instructions control which fields are populated and how verbose phases are.
   const detailInstr = {
     quick: `DETALJNIVÅ: SNABB (en sida).
-- 3-4 faser, varje phase.teacherDoes har MAX 2 punkter, INGEN teacherScript, INGEN anticipatedResponses.
-- INGEN extraTime, INGEN extraActivities, INGEN commonPitfalls, INGEN classroomManagement, INGEN homework.
-- successCriteria max 2 punkter. teacherNotes max 2 punkter.
-- differentiation.stod och differentiation.utmaning: 1-2 punkter vardera.
-- boardLayout: kort men VERBATIM (inte bara "agenda + begrepp").
-- Skriv som om läraren själv ska använda planen — koncist, inga upprepningar.`,
+- 3-4 faser, max 2 punkter i teacherDoes, INGEN teacherScript, INGEN anticipatedResponses.
+- INGEN extraTime, extraActivities, commonPitfalls, classroomManagement, homework.
+- successCriteria max 2. teacherNotes max 2.
+- boardLayout: kort men VERBATIM.`,
     standard: `DETALJNIVÅ: STANDARD (2 sidor).
-- 4-5 faser. teacherScript bara för INTRODUKTIONEN och AVSLUTNINGEN (inte varje fas).
-- anticipatedResponses bara där det verkligen behövs (kontroversiella eller fel-prone moment).
-- extraTime: 2 nivåer (5 och 15 min), inte 4.
-- extraActivities: 2 stycken.
-- commonPitfalls: 2-3 punkter.
-- Hoppa över classroomManagement helt.
-- successCriteria 3 punkter, teacherNotes 2-3 punkter.`,
-    full: `DETALJNIVÅ: FULL (3-5 sidor — komplett dokumentation).
+- 4-5 faser. teacherScript bara för INTRO och AVSLUTNING.
+- anticipatedResponses bara vid kontroversiella moment.
+- extraTime: 2 nivåer (5 och 15 min). extraActivities: 2. commonPitfalls: 2-3.`,
+    full: `DETALJNIVÅ: FULL (3-5 sidor).
 - 3-6 faser, alla med teacherScript och anticipatedResponses.
-- extraTime: alla 4 nivåer (5, 10, 15, 20 min).
-- extraActivities: 2-3 stycken.
-- commonPitfalls: 3-5 punkter.
-- successCriteria: 3-4 punkter. teacherNotes: 3-5 punkter.
-- Inkludera classroomManagement (3-5 punkter) och homework.`,
+- extraTime: 4 nivåer. extraActivities: 2-3. commonPitfalls: 3-5.
+- Inkludera classroomManagement och homework.`,
   }[detailLevel] || "";
 
   const optionalFieldsHint = detailLevel === "quick"
-    ? `\nVIKTIGT: Lämna BORT helt (inte med tomma arrayer): extraTime, extraActivities, commonPitfalls, classroomManagement, homework, anticipatedResponses, teacherScript.`
+    ? `\nVIKTIGT: Utelämna helt: extraTime, extraActivities, commonPitfalls, classroomManagement, homework, anticipatedResponses, teacherScript.`
     : detailLevel === "standard"
-      ? `\nVIKTIGT: Lämna BORT classroomManagement helt. anticipatedResponses och teacherScript inkluderas bara där detaljnivåinstruktionen anger.`
+      ? `\nVIKTIGT: Utelämna classroomManagement.`
       : "";
 
-  return `${langPrefix}Du är en svensk förstelärare som planerar en RIKTIG lektion enligt ${curriculum} från Skolverket. Din planering ska följa beprövad pedagogisk forskning (Rosenshine, Hattie, Skolverkets "Strukturerad Undervisning"-modell) och vara så konkret att en lärare kan gå rakt in i klassrummet med planen i handen och hålla en bra lektion.
+  return `${langPrefix}Du är en svensk förstelärare som planerar en RIKTIG lektion enligt ${curriculum} från Skolverket.
 
 LEKTIONSPARAMETRAR:
-- Stadium: ${stageLabel}
-- Årskurs: ${gradeLabel}
-- Ämne: ${subjectLabel}
-- Tema/område: "${topic}"
-- Lektionstid: ${duration} minuter
+- Stadium: ${stageLabel} · Årskurs: ${gradeLabel} · Ämne: ${subjectLabel}
+- Tema/område: "${topic}" · Lektionstid: ${duration} minuter
 
 ${detailInstr}${optionalFieldsHint}
 
-Detta är förslag ${branchIndex + 1} av ${totalBranches}. Varje förslag ska ha en TYDLIGT annorlunda pedagogisk vinkel — välj en av dessa modeller och säg vilken i fältet "approach":
-1. STRUKTURERAD UNDERVISNING (Direct Instruction) — Skolverkets sex-stegsmodell. Standard för faktakunskap, färdighetsträning, matematik, språkregler. Faserna är: "Inledning", "Genomgång", "Stödd övning", "Sammanfattning och kontroll", "Enskild övning", "Avslutning".
-2. PROBLEMBASERAT — eleverna brottas med ett problem först, läraren hjälper fram lösningen. För matematik, naturvetenskap, etiska frågor.
-3. UNDERSÖKANDE / LABORATIVT — eleverna utforskar konkret material för att upptäcka samband. För NO, matematik, samhällsfrågor.
-4. KOLLABORATIVT / DIALOGISKT — strukturerade gruppdiskussioner (t.ex. think-pair-share, EPA). För litteratur, samhällsämnen, värdefrågor.
-5. SKAPANDE / GESTALTANDE — eleverna producerar något (text, bild, modell, framträdande). För svenska, bild, slöjd, musik.
-6. PROJEKTBASERAT — längre arbete mot konkret produkt. När det passar lektionstiden, ofta del-fas av större projekt.
+Detta är förslag ${branchIndex + 1} av ${totalBranches}. Välj en tydligt annorlunda pedagogisk vinkel:
+1. STRUKTURERAD UNDERVISNING (Direct Instruction) — Skolverkets sex-stegsmodell
+2. PROBLEMBASERAT — eleverna brottas med ett problem först
+3. UNDERSÖKANDE / LABORATIVT — utforskar konkret material
+4. KOLLABORATIVT / DIALOGISKT — think-pair-share, EPA
+5. SKAPANDE / GESTALTANDE — eleverna producerar något
+6. PROJEKTBASERAT — längre arbete mot konkret produkt
 
-GRUNDREGLER FÖR EN VERKLIG LEKTIONSPLAN:
-- ALDRIG vaga formuleringar som "diskutera ämnet", "introducera begreppet", "samtala om". Skriv UT vad läraren säger, vilken fråga som ställs, vilket exempel som ges.
-- VARJE fas i "phases" ska ha "teacherScript" — exempel-formuleringar i citattecken som läraren faktiskt kan säga. Inte hela monologer men nyckelmeningar.
-- VARJE fas ska ha "anticipatedResponses" — vad eleverna kan tänkas svara, inklusive vanliga felsvar och hur läraren kan vända dem.
-- "kontrollfrågor" (3-5 st) — exakta frågor läraren ställer för att kolla att eleverna hänger med, INTE handuppräckning utan riktade till specifika elever (Skolverkets råd).
-- Eleverna ska få cirka 80% rätt på övningar med stöd (inte för lätt, inte för svårt).
-- Tiderna i alla faser MÅSTE summera till ${duration} min.
-
-🚫 ABSOLUT FÖRBJUDET — FANTOMREFERENSER 🚫
-Du får ALDRIG referera till något som inte är förberett i planen eller som inte explicit skapas i en tidigare fas. Detta är den vanligaste bristen i AI-genererade lektionsplaner och förstör hela planen.
-
-Exempel på fantomreferenser som FÖRSTÖR planen:
-- "Peka på Adjektivbanken på tavlan" — vad är Adjektivbanken? Vad står där? När skrevs den upp?
-- "Använd ordlistan från förra veckan" — vilken ordlista? Vilka ord?
-- "Eleverna tittar på bilden" — vilken bild? Var kommer den ifrån?
-- "Hänvisa till regeln vi gick igenom" — vilken regel? Citera den.
-
-REGEL: Om planen nämner ETT objekt (en lista, en text, en bild, en ordlista, en formel, en regel, ett exempel, en "bank", en "anslagstavla") måste EN av följande gälla:
-(a) Innehållet är skrivet ordagrant i planen, ELLER
-(b) En tidigare fas innehåller EXPLICITA steg för att skapa det, MED INNEHÅLLET (t.ex. "Skriv följande 8 adjektiv på tavlan under rubriken 'Adjektivbank': stor, liten, glad, ledsen, snabb, långsam, tyst, högljudd.").
-
-INNAN du skriver phases, fundera: "Vilket konkret material/innehåll behöver läraren ha redo på tavlan eller i handen?" — och producera det innehållet ordagrant i planen.
-
-🚫 ABSOLUT FÖRBJUDET — JSON-FÄLTNAMN I LÄRARENS INSTRUKTIONER 🚫
-Alla instruktioner i "teacherDoes" ska vara NATURLIGT SPRÅK. Du får ALDRIG använda tekniska JSON-fältnamn (som "boardLayout", "embeddedContent", "teacherScript", "phases" etc.) i texten som läraren ska läsa. Skriv istället vad läraren FAKTISKT SKA GÖRA.
-- ❌ "Write out boardLayout on the board" → ✅ "Skriv följande på tavlan: [konkret text]"
-- ❌ "Read questions from embeddedContent" → ✅ "Läs upp fråga 1: '[frågetext]'"
-- ❌ "Follow the teacherScript" → ✅ "Säg: '[konkret mening]'"
+🚫 FÖRBJUDET — FANTOMREFERENSER: referera aldrig till material som inte finns i planen.
+🚫 FÖRBJUDET — JSON-fältnamn (boardLayout, embeddedContent etc.) i instruktioner till läraren.
 
 ${langInstr}
 
-Svara endast med ett giltigt JSON-objekt, ingen markdown:
+Svara ENDAST med giltigt JSON, ingen markdown:
 {
   "title": "konkret lektionstitel (5-10 ord)",
-  "approach": "namnet på pedagogisk modell (en av de sex listade ovan)",
-  "approachReason": "en mening om varför denna modell passar för denna lektion",
-  "summary": "2-3 meningar om lektionens upplägg och röda tråd",
-  "learningGoal": "konkret mätbart lärandemål formulerat så det syns på en elevs prestation (t.ex. 'Eleven kan med egna ord förklara skillnaden mellan X och Y och ge minst två exempel')",
-  "priorKnowledge": "vad eleverna förväntas redan kunna för att lektionen ska fungera (1-2 meningar)",
-  "lgr22_connection": "konkret koppling till centralt innehåll OCH en eller flera förmågor i ${curriculum}, citera relevanta nyckelord (2-3 meningar)",
-  "successCriteria": ["3-4 konkreta tecken som läraren ser/hör om eleven har nått målet (t.ex. 'Eleven använder begreppet X i ett eget exempel utan att läraren påminner')"],
-  "boardLayout": "VERBATIM innehåll som läraren skriver på tavlan i början av lektionen. Skriv ut hela texten — agenda (4-5 punkter), centrala begrepp med definitioner, eventuella exempel som behövs senare. Detta ska kunna kopieras rakt av till tavlan. Använd radbrytningar (\\n) om det behövs. INGA platshållare som '[lärarens egna ord]'.",
-  "materialsNeeded": ["5-8 specifika material — var konkret med antal/typ (t.ex. 'tärningar, 2 per elevpar', inte bara 'tärningar')"],
-  "phases": [
-    {
-      "name": "Fasens namn (för Strukturerad Undervisning: använd de officiella namnen)",
-      "minutes": 10,
-      "purpose": "en mening om vad denna fas ska åstadkomma",
-      "teacherDoes": ["3-5 konkreta steg läraren utför i ordning"],
-      "teacherScript": ["2-4 EXEMPEL-FORMULERINGAR i citattecken som läraren kan säga ordagrant (t.ex. \\"Tänk dig att du har 12 äpplen och ska dela dem lika mellan 4 personer. Hur många får var och en?\\"). Dessa ska kännas naturliga, inte stelt skriptade."],
-      "studentsDo": ["2-4 konkreta beskrivningar av vad eleverna gör (lyssnar, skriver, diskuterar i par, etc.)"],
-      "anticipatedResponses": ["2-3 troliga elevsvar (även felaktiga) och kort hur läraren bemöter dem (t.ex. 'Om en elev säger 4 → bekräfta. Om någon säger 3 → fråga \\"Hur räknade du då?\\" och låt eleven förklara, lotsa fram rätt svar.')"]
-    }
-  ] (3-6 faser; tider summerar till ${duration} min),
-  "checkForUnderstanding": ["3-5 EXAKTA kontrollfrågor som läraren ställer under lektionen (riktade, inte handuppräckning). Ange ungefär VAR i lektionen frågan ställs."],
-  "exitTicket": {
-    "title": "kort avslutande check (3-5 min)",
-    "task": "konkret uppgift eleverna gör innan de går ut (t.ex. 'Skriv på en lapp: en sak du lärt dig idag och en fråga du fortfarande har')",
-    "purpose": "vad läraren får reda på från det"
-  },
-  "extraActivities": [
-    { "title": "för elever som blir klara tidigt", "description": "konkret aktivitet, kan göras självständigt på 5-15 min, fördjupar lektionsinnehållet", "answer": "om uppgiften har ett rätt svar — ange det här så vikarien kan kolla" }
-  ] (2-3 stycken),
-  "differentiation": {
-    "stod": ["3-4 KONKRETA stöttningsstrategier (t.ex. 'För elever som har svårt med läsning: läs textfrågorna högt; tillhandahåll bildstöd för begreppen X och Y')"],
-    "utmaning": ["3-4 KONKRETA utmaningar för särbegåvade/snabba elever (fördjupningsfrågor, abstraktionssteg, transferuppgifter — ge själva uppgiften, inte bara 'svårare uppgift')"]
-  },
-  "extraTime": [
-    { "minutes": 5, "title": "...", "description": "konkret helklassaktivitet med tydliga steg", "linkBack": "en mening om hur detta knyter an till lektionen" },
-    { "minutes": 10, "title": "...", "description": "...", "linkBack": "..." },
-    { "minutes": 15, "title": "...", "description": "...", "linkBack": "..." },
-    { "minutes": 20, "title": "...", "description": "...", "linkBack": "..." }
-  ],
-  "commonPitfalls": ["3-5 saker som typiskt går fel i denna typ av lektion och vad läraren gör då (t.ex. 'Om diskussionen tystnar efter 2 minuter: ge ett provocerande motexempel som \\"...\\"')"],
-  "teacherNotes": ["3-5 övriga praktiska anmärkningar — klassrumshantering, övergångar, hur man vet att lektionen går bra"],
-  "homework": "konkret hemuppgift om relevant — Skolverkets råd: ska kunna lösas till 90% självständigt; differentiera. Skriv 'Ingen läxa' (eller 'No homework' om språket är engelska) om inte aktuellt.",
-  "assessment": "hur denna lektion bidrar till bedömningsunderlaget och vad läraren konkret tittar efter"
-}`;
-};
-
-window.subPrompt = function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language, detailLevel = "standard" }) {
-  const isGy = stage === "Gymnasiet";
-  const curriculum = isGy ? "Gy22" : "LGR22";
-  const isEn = language === "en";
-  const langPrefix = isEn
-    ? `**LANGUAGE: English.** Every single string value in the JSON response — titles, descriptions, scripts, board content, anticipated student responses, all of it — MUST be in natural English. The prompt below uses Swedish field labels for technical reasons, but the OUTPUT IS ENGLISH.\n\n`
-    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
-  const langInstr = isEn
-    ? "REMINDER: Write everything in English."
-    : "VIKTIGT: Skriv allt på svenska.";
-  const stageLabel = isEn ? window.localizeLabel(stage, "en") : stage;
-  const gradeLabel = isEn ? window.localizeLabel(grade, "en") : grade;
-  const subjectLabel = isEn ? window.localizeLabel(subject, "en") : subject;
-
-  const baseContext = baseLesson ? `
-
-ELEVERNA HAR PRECIS GÅTT IGENOM (du måste bygga på exakt detta):
-- Titel: ${baseLesson.title}
-- Lärandemål: ${baseLesson.learningGoal || baseLesson.objective || ""}
-- Förkunskaper de hade: ${baseLesson.priorKnowledge || ""}
-- Vad de gjorde: ${(baseLesson.phases || []).map(p => `${p.name} (${p.minutes}min): ${(p.studentsDo || []).join("; ")}`).join(" | ") || (baseLesson.activities || []).join("; ")}
-- Framgångskriterier från ordinarie lektion: ${(baseLesson.successCriteria || []).join("; ")}` : `
-
-OBS: Detta är en FRISTÅENDE vikarielektion — det finns ingen ordinarie lektion att bygga på. Koordinatorn vet inte exakt vad eleverna senast gjort. Anta vanliga förkunskaper för årskursen och ämnet. Lektionen ska kunna fungera oberoende av vad eleverna gjort förra gången.`;
-
-  const rule1 = baseLesson
-    ? `1. INGA NYA begrepp införs. Lektionen befäster det eleverna redan kan.`
-    : `1. Anta vanliga förkunskaper för årskursen. Lektionen får introducera grundläggande begrepp men de ska FÖRKLARAS ordagrant i planen. Föredra repetition/tillämpning över helt nytt material.`;
-
-  // Detail-level scope for sub lessons
-  const detailInstr = {
-    quick: `DETALJNIVÅ: SNABB — kort och enkel plan, max 1 sida.
-- 3-4 faser. Varje fas: 2-3 steg i teacherDoes (korta meningar). Ingen teacherScript, inga anticipatedResponses.
-- Embedded content: max 5 frågor/tal med facit — inte mer.
-- Inga commonPitfalls, ingen classroomManagement.
-- extraTime: bara 1 tier (5 eller 10 min).
-- extraActivities: 1 enkel aktivitet.
-- Fokus på det allra viktigaste — vikarien ska kunna skumma och förstå på 60 sekunder.`,
-    standard: `DETALJNIVÅ: STANDARD — tydlig plan med lagom detalj, ca 2 sidor.
-- 3-5 faser. teacherScript för introduktionen och avslutningen (inte varje fas).
-- Embedded content: 5-8 frågor/tal/text.
-- commonPitfalls: 2-3 punkter.
-- extraTime: 2 tiers (5 och 15 min).
-- extraActivities: 2 aktiviteter.`,
-    full: `DETALJNIVÅ: FULL — komplett dokumentation för vikarier eller observation, ca 3 sidor.
-- 4-5 faser, alla med teacherScript och anticipatedResponses.
-- Embedded content: 8-12 frågor/tal/text med fullständigt facit.
-- commonPitfalls: 3-5 punkter. classroomManagement: 3-4 punkter.
-- extraTime: alla 4 tiers (5, 10, 15, 20 min).
-- extraActivities: 2-3 aktiviteter.`,
-  }[detailLevel] || "";
-
-  const optionalFieldsHint = detailLevel === "quick"
-    ? `\nVIKTIGT: Lämna BORT helt (inga tomma arrayer): anticipatedResponses, teacherScript, classroomManagement, commonPitfalls. extraTime: max 1 tier.`
-    : detailLevel === "standard"
-      ? `\nVIKTIGT: anticipatedResponses och teacherScript inkluderas BARA i intro och avslutning. classroomManagement: utelämna.`
-      : "";
-
-  return `${langPrefix}Du är en svensk förstelärare som planerar en VIKARIELEKTION enligt ${curriculum}. Planen ska vara OMEDELBART ANVÄNDBAR — vikarien öppnar dokumentet, läser och kan börja undervisa inom 2 minuter.
-
-KONTEXT:
-- Stadium: ${stageLabel}, Årskurs: ${gradeLabel}, Ämne: ${subjectLabel}
-- Tema/område: "${topic}"
-- Lektionstid: ${duration} minuter${baseContext}
-
-${detailInstr}${optionalFieldsHint}
-
-ABSOLUTA KRAV — VIKARIELEKTION:
-${rule1}
-2. ALLT INNEHÅLL ÄR FÖRBERETT I PLANEN. Om aktiviteten är "lös fem tal" — skriv talen MED FACIT. Om "diskutera tre frågor" — skriv frågorna MED exempelsvar. Om "läs en kort text" — skriv texten (max 150 ord).
-3. BRIEF STEP-BY-STEP. Varje fas = numrerade steg, korta meningar, aktiva verb. "Skriv på tavlan:", "Säg:", "Läs upp:", "Ge eleverna 10 min att:". Vikarien ska kunna följa med ett finger.
-4. ROLIGT OCH ENGAGERANDE — quiz, tävling, par-arbete, rörelse, kreativt. Välj format som håller energin uppe utan att kräva ämneskunskap.
-5. MATERIAL = KLASSRUMSBASICS ENDAST. Papper och pennor är OK. Tavla/whiteboard är OK. Projektorn/skärm OM TILLGÄNGLIG (märk tydligt som "om projektor finns"). INGET som kräver utskrift, kopiering, specialutrustning eller labbmaterial. Vikarien har inte tid att fixa detta.
-6. PROJEKTORBILD (om relevant): om du föreslår att visa något på projektor, skriv ut EXAKT vad som ska visas — en bild-URL från Wikipedia/Wikimedia Commons, ett enkelt diagram beskrivet i ord, eller en lista vikarien kan visa i helskärm i webbläsaren. Aldrig "visa en bild på X" utan att ange var bilden finns.
-7. INSTRUKTIONER = KORTA OCH DIREKTA. Max 3-4 meningar per fas-steg. Inga långa förklaringar om pedagogik. Vikarien är inte lärare — hen behöver "gör detta, säg detta, vänta på det".
-8. EXTRA-AKTIVITETER om tid blir över — fullt utskrivna, kan köras utan förberedelse.
-
-🚫 FÖRBJUDET — FANTOMREFERENSER:
-- ❌ "Peka på Adjektivbanken" → ✅ skriv listan ordagrant på tavlan i en förberedelsefas
-- ❌ "Använd boken" → ✅ skriv ut frågorna/texten i embeddedContent
-- ❌ "Visa bilden" → ✅ ange URL eller beskriv bilden ordagrant
-- ❌ Skrivna uppgifter utan facit → ✅ alla frågor/tal har svar i planen
-
-🚫 FÖRBJUDET — JSON-FÄLTNAMN I INSTRUKTIONER:
-Skriv aldrig "boardLayout", "embeddedContent", "teacherScript" i text som vikarien läser. Skriv vad hen FAKTISKT SKA GÖRA.
-
-${langInstr}
-
-Svara ENDAST med ett giltigt JSON-objekt, ingen markdown:
-{
-  "title": "rolig, tydlig titel som beskriver vad lektionen handlar om",
-  "approach": "Vikarielektion (t.ex. quiz / par-arbete / stationsövning / kreativt projekt)",
-  "summary": "2 meningar: vad gör eleverna, och varför är det kul/meningsfullt",
-  "learningGoal": "vad eleverna befäster eller tränar (en mening)",
-  "priorKnowledge": "vad eleverna förväntas kunna (1 mening)",
-  "lgr22_connection": "kort koppling till ${curriculum} (1 mening)",
-  "successCriteria": ["2-3 enkla tecken på att lektionen lyckas"],
-  "boardLayout": "VERBATIM text vikarien skriver på tavlan INNAN eleverna kommer in. Agenda + nyckelbegrepp/exempel som lektionen refererar till. Använd \\n för radbrytningar. Inga platshållare.",
-  "projectorContent": "Om lektionen drar nytta av projektor: beskriv OM vikarien ska använda den och VAD som ska visas (t.ex. 'Sök på Wikipedia: [exakt sökterm]' eller 'Öppna [konkret URL]' eller 'Skriv dessa frågor i helskärm'). Skriv null om projektor inte behövs.",
-  "materialsNeeded": ["ENDAST klassrumsbasics: papper, pennor, tavla, ev. projektor. Max 4 punkter. Inga utskrifter, inget labbmaterial."],
+  "approach": "pedagogisk modell",
+  "approachReason": "en mening om varför modellen passar",
+  "summary": "2-3 meningar om lektionens upplägg",
+  "learningGoal": "konkret mätbart lärandemål",
+  "priorKnowledge": "vad eleverna förväntas kunna (1-2 meningar)",
+  "lgr22_connection": "konkret koppling till ${curriculum} (2-3 meningar)",
+  "successCriteria": ["3-4 konkreta tecken att målet nåtts"],
+  "boardLayout": "VERBATIM text till tavlan — agenda + begrepp + exempel. Inga platshållare. \\n för radbrytningar.",
+  "materialsNeeded": ["5-8 specifika material med antal/typ"],
   "phases": [
     {
       "name": "Fasens namn",
       "minutes": 10,
       "purpose": "vad fasen åstadkommer (1 mening)",
-      "teacherDoes": ["Numrerade steg: '1. Skriv på tavlan: [text]', '2. Säg: [mening]', '3. Ge eleverna 8 min att [aktivitet]'. Korta, direkta, inga förklaringar."],
-      "teacherScript": ["Exakt vad vikarien säger (bara om detaljnivå kräver det)."],
-      "studentsDo": ["Vad eleverna gör — konkret och kortfattat."],
-      "anticipatedResponses": ["Troliga elevsvar + hur vikarien bemöter dem (bara om detaljnivå kräver det)."]
+      "teacherDoes": ["3-5 konkreta steg"],
+      "teacherScript": ["2-4 exakta formuleringar i citattecken"],
+      "studentsDo": ["2-4 konkreta beskrivningar"],
+      "anticipatedResponses": ["2-3 troliga elevsvar + hur läraren bemöter"]
     }
-  ] (3-5 faser, summa = ${duration} min),
+  ],
+  "checkForUnderstanding": ["3-5 exakta kontrollfrågor"],
+  "exitTicket": { "title": "...", "task": "...", "purpose": "..." },
+  "extraActivities": [{ "title": "...", "description": "...", "answer": "..." }],
+  "differentiation": {
+    "stod": ["3-4 konkreta stöttningar"],
+    "utmaning": ["3-4 konkreta utmaningar"]
+  },
+  "extraTime": [
+    { "minutes": 5,  "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 10, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 15, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 20, "title": "...", "description": "...", "linkBack": "..." }
+  ],
+  "commonPitfalls": ["3-5 saker som typiskt går fel + lösning"],
+  "teacherNotes": ["3-5 praktiska anmärkningar"],
+  "homework": "konkret hemuppgift eller 'Ingen läxa'",
+  "assessment": "hur lektionen bidrar till bedömningsunderlaget"
+}`;
+};
+
+// ============================================================
+// subPrompt — Research-backed sub lesson generator.
+// ============================================================
+window.subPrompt = function subPrompt({ stage, grade, subject, topic, duration, baseLesson, language, detailLevel = "standard" }) {
+  const isGy = stage === "Gymnasiet";
+  const curriculum = isGy ? "Gy22" : "LGR22";
+  const isEn = language === "en";
+  const langPrefix = isEn
+    ? `**LANGUAGE: English.** Every string value in the JSON MUST be in natural English.\n\n`
+    : `**SPRÅK: Svenska.** Allt innehåll ska skrivas på svenska.\n\n`;
+  const langInstr = isEn ? "REMINDER: Write everything in English." : "VIKTIGT: Skriv allt på svenska.";
+  const stageLabel = isEn ? window.localizeLabel(stage, "en") : stage;
+  const gradeLabel = isEn ? window.localizeLabel(grade, "en") : grade;
+  const subjectLabel = isEn ? window.localizeLabel(subject, "en") : subject;
+
+  const baseContext = baseLesson
+    ? `\nELEVERNA HAR PRECIS GÅTT IGENOM:\n- Titel: ${baseLesson.title}\n- Lärandemål: ${baseLesson.learningGoal || baseLesson.objective || ""}\n- Vad de gjorde: ${(baseLesson.phases || []).map(p => `${p.name} (${p.minutes}min): ${(p.studentsDo || []).join("; ")}`).join(" | ")}`
+    : `\nFRISTÅENDE LEKTION — anta vanliga förkunskaper för ${gradeLabel} i ${subjectLabel}.`;
+
+  const rule1 = baseLesson
+    ? "1. INGA NYA begrepp — befäster det eleverna redan kan."
+    : "1. Anta vanliga förkunskaper. Grundläggande begrepp förklaras ordagrant i planen.";
+
+  const detailScope = {
+    quick: `DETALJNIVÅ: SNABB — skimmbar på 60 sekunder.
+- 3-4 faser, 3 steg per fas, INGA teacherScript, INGA anticipatedResponses.
+- embeddedContent: max 5 frågor/tal. Inga commonPitfalls. extraTime: 1 tier. rescueActivities: 2.`,
+    standard: `DETALJNIVÅ: STANDARD — tydlig, ca 2 sidor.
+- 3-5 faser, 4 steg per fas, teacherScript för intro/avslutning.
+- embeddedContent: 5-8. commonPitfalls: 2-3. extraTime: 2 tiers. rescueActivities: 3.`,
+    full: `DETALJNIVÅ: FULL — komplett, ca 3 sidor.
+- 4-5 faser, alla med teacherScript och anticipatedResponses.
+- embeddedContent: 8-12. commonPitfalls: 3-5. classroomManagement: 3-4 tekniker. extraTime: 4 tiers. rescueActivities: 4.`,
+  }[detailLevel] || "";
+
+  const optFields = detailLevel === "quick"
+    ? "\nUTELÄMNA: anticipatedResponses, teacherScript, classroomManagement, commonPitfalls."
+    : "";
+
+  return `${langPrefix}Du är expert på att skapa VIKARIELEKTION enligt ${curriculum}. Planen ska vara OMEDELBART ANVÄNDBAR — vikarien kan börja undervisa inom 2 minuter.
+
+## VAD FORSKNING SÄGER OM FRAMGÅNGSRIKA VIKARIELEKTIONER:
+
+**Beteende är #1 utmaningen** (RedRover sub-survey 2023-25, 16 000+ vikarier):
+Vikarier slutar på grund av beteende, inte dåliga lektioner. Varje plan MÅSTE inkludera:
+→ Exakt vad vikarien gör DE FÖRSTA 60 SEKUNDERNA (auktoritet etableras nu eller aldrig)
+→ Exakta fraser för positiv förstärkning (SDT-forskning visar att dessa fungerar)
+→ "Rescue activities" — vad vikarien gör om lektionen spårar ur
+→ Three-touch rule: Närvaro (gå nära) → Icke-verbal (ögonkontakt) → Verbal (förnamn)
+
+**Vikarier skannar, de läser inte** (EdWeek 2024):
+Varje steg = EN rad, börjar med ett VERB.
+✅ "1. Skriv på tavlan: [text]" · "2. Säg: '[mening]'" · "3. Ge 8 min till:"
+❌ "Introducera lektionen och förklara syftet för eleverna på ett engagerande sätt."
+
+**Aktiv > Passiv** (high-quality sub teaching research, Edutopia):
+Kalkylblad och passivt arbete skapar kaos. Välj: quiz, tävling, par-arbete, rörelse, skapande.
+First/Then-struktur motiverar: "Gör X (5 min) → sedan Y (roligare del)."
+
+**Visuell agenda minskar elevers ångest** (evidensbaserad VS-praktik):
+Elever som vet vad som händer är lugnare och mer samarbetsvilliga.
+
+**Fantasy/novelty/humour ökar motivation** (SDT-forskning, Frontiers 2023):
+Bygg in ett overraskningsmoment — det behöver inte vara stort, men ska vara oväntat.
+
+KONTEXT:
+- Stadium: ${stageLabel} · Årskurs: ${gradeLabel} · Ämne: ${subjectLabel}
+- Tema: "${topic}" · Tid: ${duration} min${baseContext}
+
+${detailScope}${optFields}
+
+ABSOLUTA KRAV:
+${rule1}
+2. ALLT INNEHÅLL förberett i planen — inga "läs ur boken", inga externa resurser utan URL.
+3. MATERIAL = papper, pennor, tavla, ev. projektor. INGET som kräver utskrift/kopiering/labbmaterial.
+4. Roligt och engagerande — aktivt, inte passivt.
+5. Planen FÅR INTE referera till något som inte skapas explicit i planen (fantomreferenser).
+6. JSON-fältnamn ALDRIG i instruktioner till vikarien.
+
+${langInstr}
+
+Svara ENDAST med giltigt JSON, ingen markdown:
+{
+  "title": "rolig, tydlig titel med en hook om lektionens innehåll",
+  "approach": "Vikarielektion (t.ex. quiz / par-arbete / stations / tävling / skapande)",
+  "summary": "2 meningar: vad gör eleverna, varför är det kul/meningsfullt",
+  "learningGoal": "vad eleverna befäster eller tränar (en mening)",
+  "priorKnowledge": "vad eleverna förväntas kunna (1 mening)",
+  "lgr22_connection": "kort koppling till ${curriculum} (1 mening)",
+  "successCriteria": ["2-3 enkla tecken på att lektionen lyckas"],
+
+  "firstSixtySeconds": {
+    "boardMessage": "VERBATIM: välkomsthälsning + agenda (3-4 numrerade punkter) + vikariets namn. Skrivs på tavlan INNAN eleverna kommer in.",
+    "greeting": "Exakt vad vikarien säger när alla sitter ner (30 sek, varm men tydlig, etablerar förväntningar direkt)",
+    "authorityTip": "1 konkret tip för att etablera respekt direkt (t.ex. stå vid dörren, hälsa varje elev vid namn med seatingplan)"
+  },
+
+  "confidenceChecklist": [
+    "✓ Namn skrivet på tavlan",
+    "✓ Agenda synlig för hela klassen",
+    "Ytterligare 3-4 konkreta punkter vikarien bockar av INNAN lektionen"
+  ],
+
+  "boardLayout": "VERBATIM hela taveltexten: välkomst, numrerad agenda, nyckelbegrepp med definitioner, eventuella frågor/tal. Inga platshållare. \\n för radbrytningar.",
+
+  "projectorContent": "Om projektor finns: konkret URL eller 'Sök: [exakt sökterm]' eller text i helskärm. null om inte relevant.",
+
+  "materialsNeeded": ["ENDAST basics: papper, pennor, tavla, ev. projektor. Max 4 punkter."],
+
+  "positiveReinforcementPhrases": [
+    "4-5 EXAKTA fraser att säga när elever gör rätt (t.ex. 'Jag märker att [namn] verkligen anstränger sig', 'Klassen imponerar på mig')"
+  ],
+
+  "phases": [
+    {
+      "name": "Fasens namn",
+      "minutes": 10,
+      "purpose": "vad fasen åstadkommer (1 mening)",
+      "teacherDoes": [
+        "1. [Verb]: [exakt handling]",
+        "2. [Verb]: [exakt handling]",
+        "3. [Verb]: [exakt handling]"
+      ],
+      "teacherScript": ["'Exakt vad vikarien säger' — naturlig ton, inte stelt"],
+      "studentsDo": ["Konkret beskrivning av elevernas aktivitet"],
+      "anticipatedResponses": ["Troliga svar (rätt + fel) + hur vikarien bemöter konkret"]
+    }
+  ],
+
   "embeddedContent": {
     "questions": [
       { "q": "fullständig fråga", "expectedAnswer": "kort svar", "ifStuck": "tips om eleverna fastnar" }
     ],
     "problems": [
-      { "problem": "fullständig uppgift", "answer": "svar med kort förklaring", "difficulty": "lätt/medel/svår" }
+      { "problem": "fullständig uppgift", "answer": "svar med förklaring", "difficulty": "lätt/medel/svår" }
     ],
     "texts": [
-      { "title": "titel", "content": "fullständig text, max 150 ord", "purpose": "vad eleverna ska göra med texten" }
+      { "title": "titel", "content": "fullständig text max 150 ord", "purpose": "vad eleverna gör med den" }
     ],
     "exampleAnswers": [
       { "scenario": "om en elev säger X", "response": "exakt vad vikarien svarar" }
     ]
   },
+
   "exitTicket": {
     "title": "avslutande check",
-    "task": "konkret avslutande uppgift (1-2 meningar)",
+    "task": "konkret uppgift (eleverna ska känna att de åstadkommit något)",
     "purpose": "vad vikarien lämnar till ordinarie lärare"
   },
+
   "extraActivities": [
-    { "title": "om tid över", "description": "konkret aktivitet, inga förberedelser krävs", "answer": "facit om relevant" }
+    { "title": "om tid finns över", "description": "konkret, inga förberedelser", "answer": "facit om relevant" }
   ],
+
+  "rescueActivities": [
+    {
+      "scenario": "Om klassen är stökig och inte vill sätta igång",
+      "activity": "Konkret aktivitet som omedelbart fångar uppmärksamheten",
+      "script": "Exakt vad vikarien säger"
+    },
+    {
+      "scenario": "Om lektionen tar slut 20 min för tidigt",
+      "activity": "Fullständig aktivitet utan förberedelse",
+      "script": "Exakt vad vikarien säger"
+    },
+    {
+      "scenario": "Om en enskild elev vägrar delta",
+      "activity": "Icke-konfrontativ strategi som inkluderar eleven",
+      "script": "Exakt vad vikarien säger"
+    }
+  ],
+
   "differentiation": {
-    "stod": ["2-3 enkla stöttningar"],
-    "utmaning": ["2-3 enkla utmaningar för snabba elever"]
+    "stod": ["2-3 enkla stöttningar utan extra material"],
+    "utmaning": ["2-3 utmaningar för snabba elever — konkret uppgift"]
   },
+
   "extraTime": [
-    { "minutes": 5, "title": "...", "description": "...", "linkBack": "..." },
+    { "minutes": 5,  "title": "...", "description": "...", "linkBack": "..." },
     { "minutes": 10, "title": "...", "description": "...", "linkBack": "..." },
     { "minutes": 15, "title": "...", "description": "...", "linkBack": "..." },
     { "minutes": 20, "title": "...", "description": "...", "linkBack": "..." }
   ],
-  "commonPitfalls": ["vanliga fallgropar för vikarie i denna situation"],
-  "classroomManagement": ["specifika tips: lugna ner, engagera, skapa trygghet"],
+
+  "commonPitfalls": [
+    "Vanlig fallgrop + konkret lösning med script (t.ex. 'Om alla pratar på en gång: räkna ner från 5 tyst med fingrar. Invänta tystnad.')"
+  ],
+
+  "classroomManagement": [
+    "Konkret teknik med exakt script (t.ex. 'Three-touch rule: 1. Gå nära utan att säga något. 2. Ögonkontakt + tyst nick mot arbetet. 3. Säg lugnt: [Förnamn], snälla.')"
+  ],
+
   "teacherNotes": ["1-3 korta praktiska tips"],
-  "subTip": "Det viktigaste tipset till vikarien för just denna lektion (1 mening, max 20 ord)"
+
+  "subTip": "Det viktigaste tipset (max 20 ord, börja med ett verb)"
 }`;
 };
 
-// Translates an existing Swedish lesson JSON to the target language. Preserves
-// the exact JSON shape; only string VALUES are translated.
 window.translateLessonPrompt = function translateLessonPrompt({ lesson, targetLanguage }) {
   const target = targetLanguage === "en" ? "English" : "Swedish";
   return `You are a translator. Translate this lesson plan JSON from Swedish to ${target}.
 
-CRITICAL RULES:
+RULES:
 1. Output ONLY the translated JSON. No commentary, no markdown, no backticks.
 2. Preserve the EXACT JSON structure — same keys, same nesting, same arrays.
 3. Translate every string VALUE. Do NOT translate JSON keys.
-4. Keep numbers, durations, and IDs unchanged.
-5. For curriculum references (LGR22, Gy22, central content phrases), keep the proper noun "LGR22"/"Gy22" but translate the surrounding description.
-6. Subject names: "Matematik" → "Mathematics", "Svenska" → "Swedish", "Engelska" → "English", "NO" → "Science", "SO" → "Social Studies", "Idrott" → "PE", "Bild" → "Visual Arts", "Musik" → "Music".
-7. Phase names: "Inledning" → "Introduction", "Genomgång" → "Direct teaching", "Stödd övning" → "Guided practice", "Enskild övning" → "Independent practice", "Avslutning" → "Closing".
-8. Keep teacher-script tone natural in ${target}. Don't translate word-for-word; translate meaning.
-9. If a value is already in ${target}, leave it unchanged.
+4. Keep numbers and IDs unchanged.
+5. Keep "LGR22"/"Gy22" but translate surrounding text.
+6. Subject names: "Matematik"→"Mathematics", "Svenska"→"Swedish", "Engelska"→"English", "NO"→"Science", "SO"→"Social Studies", "Idrott"→"PE", "Bild"→"Visual Arts", "Musik"→"Music".
+7. Phase names: "Inledning"→"Introduction", "Genomgång"→"Direct teaching", "Stödd övning"→"Guided practice", "Enskild övning"→"Independent practice", "Avslutning"→"Closing".
+8. Translate meaning naturally, not word-for-word.
 
 LESSON JSON TO TRANSLATE:
 ${JSON.stringify(lesson, null, 2)}`;
 };
 
-// ---- Extras prompts ----
 function extrasContextBlock(lesson, language) {
   const isSv = language === "sv";
   const lines = [];
@@ -383,9 +383,7 @@ function extrasContextBlock(lesson, language) {
   lines.push(`- ${isSv ? "Titel" : "Title"}: ${lesson.title}`);
   if (lesson.learningGoal) lines.push(`- ${isSv ? "Lärandemål" : "Learning goal"}: ${lesson.learningGoal}`);
   if (lesson.summary) lines.push(`- ${isSv ? "Sammanfattning" : "Summary"}: ${lesson.summary}`);
-  if (lesson.phases?.length) {
-    lines.push(`- ${isSv ? "Faser" : "Phases"}: ${lesson.phases.map(p => `${p.name} (${p.minutes}min)`).join(" | ")}`);
-  }
+  if (lesson.phases?.length) lines.push(`- ${isSv ? "Faser" : "Phases"}: ${lesson.phases.map(p => `${p.name} (${p.minutes}min)`).join(" | ")}`);
   return lines.join("\n");
 }
 
@@ -393,9 +391,9 @@ window.extrasPrompt = function extrasPrompt({ kind, lesson, stage, grade, subjec
   const isSv = language === "sv";
   const isEn = !isSv;
   const langPrefix = isEn
-    ? `**LANGUAGE: English.** Every string value in the JSON response must be in natural English. The prompt below uses Swedish framing for technical reasons, but the OUTPUT IS ENGLISH.\n\n`
-    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
-  const langInstr = isSv ? "Svara på svenska." : "REMINDER: respond in English.";
+    ? `**LANGUAGE: English.** Every string value in the JSON must be in natural English.\n\n`
+    : `**SPRÅK: Svenska.** Allt innehåll ska skrivas på svenska.\n\n`;
+  const langInstr = isSv ? "Svara på svenska." : "Respond in English.";
   const ctx = extrasContextBlock(lesson, language);
   const stageLabel = isEn ? window.localizeLabel(stage, "en") : stage;
   const gradeLabel = isEn ? window.localizeLabel(grade, "en") : grade;
@@ -404,146 +402,77 @@ window.extrasPrompt = function extrasPrompt({ kind, lesson, stage, grade, subjec
   const youngerLearner = (typeof grade === "number" && grade <= 6) || /^F-|^åk ?[1-6]/i.test(String(grade));
 
   const builders = {
-    worksheet: () => `${langPrefix}Du genererar ett ARBETSBLAD för eleverna baserat på lektionen nedan.
-
-${meta}
-${ctx}
-
-KRAV:
-- 5-10 uppgifter som befäster lektionens lärandemål. Anpassade till årskurs ${grade}.
-- Varje uppgift har konkret frågetext (inga platshållare).
-- Inkludera FACIT separat — kort förklaring där det behövs.
-- Variera typer: numrerade frågor, lucktext, kort uppgift att lösa, kort öppen fråga.
-- INGA fantomreferenser. Allt innehåll måste vara skrivet ordagrant i uppgiftstexterna.
-
-${langInstr} Svara endast med giltigt JSON, ingen markdown:
+    worksheet: () => `${langPrefix}Du genererar ett ARBETSBLAD baserat på lektionen nedan.
+${meta}\n${ctx}
+KRAV: 5-10 uppgifter som befäster lärandemålet. Varje uppgift har konkret frågetext. Inkludera FACIT. Variera typer. INGA fantomreferenser.
+${langInstr} Svara ENDAST med giltigt JSON, ingen markdown:
 {
   "title": "arbetsbladets titel",
-  "instructions": "kort instruktion till eleven (1-2 meningar)",
-  "exercises": [
-    { "n": 1, "type": "open|fill|multiple|short|calc", "question": "fullständig frågetext", "answer": "fullständigt facit", "explanation": "kort förklaring om relevant" }
-  ],
-  "answerKeyNote": "kort kommentar till läraren om hur facit används (1 mening)"
+  "instructions": "instruktion till eleven (1-2 meningar)",
+  "exercises": [{ "n": 1, "type": "open|fill|multiple|short|calc", "question": "fullständig frågetext", "answer": "fullständigt facit", "explanation": "kort förklaring om relevant" }],
+  "answerKeyNote": "kommentar till läraren (1 mening)"
 }`,
 
-    badges: () => `${langPrefix}Du genererar 3-5 belöningsmärken (badges) för denna lektion. ${youngerLearner ? "Eleverna är yngre — använd lekfullt språk, roliga namn, känslor." : "Eleverna är äldre — håll det subtilt, inte barnsligt. Tänk 'expert', 'utforskare', 'analytiker' snarare än 'super-stjärna'."}
-
-${meta}
-${ctx}
-
-KRAV:
-- Varje märke kopplas till ett konkret beteende eller framsteg under lektionen.
-- Märket har en kort titel (1-3 ord), en kort beskrivning av kriteriet, och en emoji som ikon.
-- Välj färger som passar märket (hex-koder).
-
-${langInstr} Svara endast med giltigt JSON:
+    badges: () => `${langPrefix}Du genererar 3-5 belöningsmärken för lektionen nedan.
+${meta}\n${ctx}
+${youngerLearner ? "Yngre elever — lekfullt språk, roliga namn, känslor." : "Äldre elever — subtilt, inte barnsligt. Tänk 'expert', 'analytiker'."}
+KRAV: Varje märke kopplas till konkret beteende. Kort titel (1-3 ord), kriterium, emoji, hex-färger.
+${langInstr} Svara ENDAST med giltigt JSON:
 {
-  "badges": [
-    { "title": "kort titel", "criterion": "vad eleven gjorde för att förtjäna det (en mening)", "emoji": "🌟", "color": "#hexkod", "textColor": "#hexkod" }
-  ]
+  "badges": [{ "title": "titel", "criterion": "vad eleven gjorde (en mening)", "emoji": "🌟", "color": "#hex", "textColor": "#hex" }]
 }`,
 
-    flashcards: () => `${langPrefix}Du genererar en uppsättning ord-/begreppskort (flashcards) baserade på lektionen.
-
-${meta}
-${ctx}
-
-KRAV:
-- 8-12 kort med nyckelbegrepp/ord från lektionen.
-- Framsidan: ordet eller begreppet. Baksidan: kort definition på elevernas nivå (årskurs ${grade}).
-- Vid relevans: en kort exempelfras som visar användningen.
-- INGA begrepp som inte introduceras i lektionen.
-
-${langInstr} Svara endast med giltigt JSON:
+    flashcards: () => `${langPrefix}Du genererar 8-12 flashcards baserade på lektionen nedan.
+${meta}\n${ctx}
+KRAV: Framsida = ord/begrepp. Baksida = definition på elevernas nivå (årskurs ${grade}). Exempelfras vid relevans. Bara begrepp som introduceras i lektionen.
+${langInstr} Svara ENDAST med giltigt JSON:
 {
   "title": "korten-uppsättningens titel",
-  "cards": [
-    { "front": "ord eller begrepp", "back": "kort definition (max 20 ord)", "example": "exempelfras (valfritt)" }
-  ]
+  "cards": [{ "front": "ord eller begrepp", "back": "definition (max 20 ord)", "example": "exempelfras (valfritt)" }]
 }`,
 
-    discussionCards: () => `${langPrefix}Du genererar diskussionsfrågor som klippkort för grupparbete.
-
-${meta}
-${ctx}
-
-KRAV:
-- 6-10 öppna frågor som driver djupare diskussion kring lektionens innehåll.
-- Inga ja/nej-frågor. Använd "Varför...", "Hur skulle ni...", "Vad händer om...", "Jämför...".
-- Varje fråga har en kort "lyssna efter"-rad till läraren — vad ett bra svar innehåller.
-- Anpassade till årskurs ${grade}.
-
-${langInstr} Svara endast med giltigt JSON:
+    discussionCards: () => `${langPrefix}Du genererar 6-10 diskussionskort för lektionen nedan.
+${meta}\n${ctx}
+KRAV: Öppna frågor (Varför, Hur, Vad händer om, Jämför). Ingen ja/nej. "Lyssna efter" för läraren. Anpassade till årskurs ${grade}.
+${langInstr} Svara ENDAST med giltigt JSON:
 {
   "title": "korten-uppsättningens titel",
   "instructions": "instruktion till gruppen (1-2 meningar)",
-  "cards": [
-    { "n": 1, "question": "fullständig öppen fråga", "listenFor": "vad ett bra svar innehåller (en mening till läraren)" }
-  ]
+  "cards": [{ "n": 1, "question": "öppen fråga", "listenFor": "vad ett bra svar innehåller (en mening)" }]
 }`,
 
-    anchorChart: () => `${langPrefix}Du genererar en TAVELPLAN (anchor chart) — exakt vad läraren ritar/skriver på tavlan som referens under hela lektionen.
-
-${meta}
-${ctx}
-
-KRAV:
-- Klar layout med en huvudrubrik och 3-5 sektioner.
-- Varje sektion har en tydlig underrubrik och 2-5 konkreta punkter eller exempel — INGA platshållare.
-- Om relevant: enkla streckfigurer eller diagram beskrivna i ord (t.ex. "Rita en pil från X till Y").
-- Innehållet ska kunna kopieras rakt av till en tavla eller skrivas ut som A3.
-
-${langInstr} Svara endast med giltigt JSON:
+    anchorChart: () => `${langPrefix}Du genererar en TAVELPLAN för lektionen nedan.
+${meta}\n${ctx}
+KRAV: Huvudrubrik + 3-5 sektioner med underrubrik och 2-5 konkreta punkter. Inga platshållare. Kan kopieras rakt till tavlan eller A3.
+${langInstr} Svara ENDAST med giltigt JSON:
 {
   "title": "tavelplanens huvudrubrik",
   "subtitle": "kort underrubrik (1 mening)",
-  "sections": [
-    { "heading": "underrubrik", "items": ["punkt 1", "punkt 2", "punkt 3"], "visualHint": "valfri instruktion om en skiss/symbol att rita" }
-  ],
-  "keyTakeaway": "den ENA meningen läraren vill att eleverna minns när de lämnar lektionen"
+  "sections": [{ "heading": "underrubrik", "items": ["punkt 1", "punkt 2"], "visualHint": "valfri instruktion om skiss" }],
+  "keyTakeaway": "den ENA meningen eleverna minns"
 }`,
 
-    diagram: () => `${langPrefix}Du genererar ett MERMAID-DIAGRAM som visualiserar en central process eller struktur från lektionen.
-
-${meta}
-${ctx}
-
-KRAV:
-- Välj rätt diagramtyp: flowchart för processer, timeline för tidsförlopp, mindmap för begreppskartor, sequenceDiagram för dialog/händelser, classDiagram för hierarkier.
-- Diagrammet ska vara LÄSBART när det skrivs ut — inga onödiga noder, ren struktur.
-- Innehållet är konkret från lektionen, inte abstrakt.
-- Endast Mermaid-syntax i fältet "code". INGA \`\`\` -staket.
-
-${langInstr} Svara endast med giltigt JSON:
+    diagram: () => `${langPrefix}Du genererar ett MERMAID-DIAGRAM för lektionen nedan.
+${meta}\n${ctx}
+KRAV: Rätt typ (flowchart/timeline/mindmap/sequenceDiagram/classDiagram). Läsbart, konkret innehåll från lektionen. Bara Mermaid-syntax i "code", INGA backticks.
+${langInstr} Svara ENDAST med giltigt JSON:
 {
   "type": "flowchart|timeline|mindmap|sequenceDiagram|classDiagram",
   "title": "diagrammets titel",
   "description": "vad diagrammet visar (1-2 meningar)",
   "code": "ren mermaid-syntax utan code-fence",
-  "useCase": "när i lektionen läraren visar diagrammet"
+  "useCase": "när i lektionen läraren visar det"
 }`,
 
-    imageSearch: () => `${langPrefix}Du föreslår BILDSÖKNINGAR för varje fas av lektionen — kuraterade länkar till fria bildkällor.
-
-${meta}
-${ctx}
-
-KRAV:
-- Per fas: 2-3 specifika sökfrågor (på ${isSv ? "engelska för bättre resultat" : "English"}) som hittar relevanta, fria bilder.
-- Föreslå rätt källa per fråga: Pixabay, Unsplash, Wikipedia Commons för fakta, ${isSv ? "SO-rummet eller NRM för svensk kontext" : "national archives or museums for cultural content"}.
-- Kort förklaring varför bilden hjälper i just den fasen.
-- INGA AI-genererade bilder. Endast riktiga sökstrategier.
-
-${langInstr} Svara endast med giltigt JSON:
+    imageSearch: () => `${langPrefix}Du föreslår BILDSÖKNINGAR per fas för lektionen nedan.
+${meta}\n${ctx}
+KRAV: 2-3 sökfrågor per fas på engelska. Rätt källa (Pixabay/Unsplash/Wikipedia Commons). Kort förklaring varför bilden hjälper. Direktlänk.
+${langInstr} Svara ENDAST med giltigt JSON:
 {
-  "phaseSearches": [
-    {
-      "phaseName": "fasens namn från lektionen",
-      "searches": [
-        { "query": "engelska sökord", "source": "pixabay|unsplash|commons|other", "url": "https://... direkt sök-URL", "why": "varför bilden hjälper (1 mening)" }
-      ]
-    }
-  ]
+  "phaseSearches": [{
+    "phaseName": "fasens namn från lektionen",
+    "searches": [{ "query": "engelska sökord", "source": "pixabay|unsplash|commons|other", "url": "https://...", "why": "varför bilden hjälper (1 mening)" }]
+  }]
 }`,
   };
 
