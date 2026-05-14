@@ -98,8 +98,14 @@ window.SubGenerationAnimation = function SubGenerationAnimation({ language = "sv
       // Subtle border
       ctx.strokeStyle = line;
       ctx.lineWidth = 1;
+      // Manual rounded rect (roundRect not available in all browsers)
+      const r0 = 10;
       ctx.beginPath();
-      ctx.roundRect(0, 0, W, H, 10);
+      ctx.moveTo(r0, 0); ctx.lineTo(W-r0, 0); ctx.arcTo(W,0,W,r0,r0);
+      ctx.lineTo(W,H-r0); ctx.arcTo(W,H,W-r0,H,r0);
+      ctx.lineTo(r0,H); ctx.arcTo(0,H,0,H-r0,r0);
+      ctx.lineTo(0,r0); ctx.arcTo(0,0,r0,0,r0);
+      ctx.closePath();
       ctx.stroke();
 
       const t = tick % TOTAL;
@@ -111,8 +117,17 @@ window.SubGenerationAnimation = function SubGenerationAnimation({ language = "sv
         const drawW = row.w * progress;
         ctx.fillStyle = row.color;
         const r = Math.min(3, row.h / 2);
+        // Safe rounded rect
         ctx.beginPath();
-        ctx.roundRect(x, row.y, drawW, row.h, r);
+        if (drawW < r*2 || row.h < r*2) {
+          ctx.rect(x, row.y, drawW, row.h);
+        } else {
+          ctx.moveTo(x+r, row.y); ctx.lineTo(x+drawW-r, row.y); ctx.arcTo(x+drawW, row.y, x+drawW, row.y+r, r);
+          ctx.lineTo(x+drawW, row.y+row.h-r); ctx.arcTo(x+drawW, row.y+row.h, x+drawW-r, row.y+row.h, r);
+          ctx.lineTo(x+r, row.y+row.h); ctx.arcTo(x, row.y+row.h, x, row.y+row.h-r, r);
+          ctx.lineTo(x, row.y+r); ctx.arcTo(x, row.y, x+r, row.y, r);
+          ctx.closePath();
+        }
         ctx.fill();
       });
 
@@ -146,8 +161,8 @@ window.SubGenerationAnimation = function SubGenerationAnimation({ language = "sv
     ? "Skapar din vikarielektion…"
     : "Creating your substitute lesson…";
   const subheading = language === "sv"
-    ? "Vi bygger en komplett, lättföljd plan optimerad för vikarie."
-    : "Building a complete, easy-to-follow plan optimised for substitutes.";
+    ? "Vi bygger en komplett, lättföljd plan optimerad för vikarie. Detta kan ta 2–3 minuter."
+    : "Building a complete, easy-to-follow plan optimised for substitutes. This can take 2–3 minutes.";
 
   return (
     <div style={{
