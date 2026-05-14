@@ -2,12 +2,13 @@
 // LessonCardWithTabs — tab bar that switches between the main plan
 // and the 7 extras. Auto-generates an extra the first time its tab
 // is clicked (if not already cached or loading).
+// Change: now accepts and passes `language` prop to LessonCard.
 // Depends on: Icon.js, LessonCard.js, ExtrasTabs.js
 // ============================================================
 const { useEffect: useEffect_tabs } = React;
 
 window.LessonCardWithTabs = function LessonCardWithTabs({
-  lesson, t, extrasEnabled, extrasCache, loadingExtras,
+  lesson, t, language = "sv", extrasEnabled, extrasCache, loadingExtras,
   onGenerateExtra, onForceRegenerate,
   activeTab, setActiveTab,
   onMarkUsed, onSubmitFeedback,
@@ -78,7 +79,7 @@ window.LessonCardWithTabs = function LessonCardWithTabs({
       </div>
 
       {/* Tab content */}
-      {activeTab === "plan" && <window.LessonCard lesson={lesson} t={t} onMarkUsed={onMarkUsed} onSubmitFeedback={onSubmitFeedback} />}
+      {activeTab === "plan" && <window.LessonCard lesson={lesson} t={t} language={language} onMarkUsed={onMarkUsed} onSubmitFeedback={onSubmitFeedback} />}
       {activeTab === "worksheet"       && <window.WorksheetTab       data={data} loading={loading} onGenerate={() => onForceRegenerate("worksheet")} t={t} />}
       {activeTab === "anchorChart"     && <window.AnchorChartTab     data={data} loading={loading} onGenerate={() => onForceRegenerate("anchorChart")} t={t} />}
       {activeTab === "badges"          && <window.BadgesTab          data={data} loading={loading} onGenerate={() => onForceRegenerate("badges")} t={t} />}
