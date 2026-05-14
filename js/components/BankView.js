@@ -306,8 +306,6 @@ window.PoolFullModal = function PoolFullModal({ stage, grade, subject, isSub = t
   const accent   = "#C9A013";
   const accentBg = "#FFF8E1";
   const label    = t.poolFullSub || (t.language === "en" ? "Substitute pool full" : "Vikariespool full");
-    ? (t.language === "en" ? "Substitute" : "Vikarie")
-    : (t.language === "en" ? "Teacher" : "Lärare");
 
   return (
     <div onClick={onClose} style={{
