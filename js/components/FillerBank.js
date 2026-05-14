@@ -18,29 +18,35 @@ window.FILLER_YEAR_BANDS = [
 ];
 
 window.FILLER_CATEGORIES = [
-  // Curriculum
-  { key: "svenska",       group: "curriculum", label: { sv: "Svenska",       en: "Swedish"          }, emoji: "📝" },
-  { key: "matematik",     group: "curriculum", label: { sv: "Matematik",     en: "Mathematics"      }, emoji: "🔢" },
-  { key: "engelska",      group: "curriculum", label: { sv: "Engelska",      en: "English"          }, emoji: "🇬🇧" },
-  { key: "no",            group: "curriculum", label: { sv: "NO/Naturkunskap",en: "Science"          }, emoji: "🔬" },
-  { key: "so",            group: "curriculum", label: { sv: "SO/Samhälle",   en: "Social studies"   }, emoji: "🌍" },
-  { key: "historia",      group: "curriculum", label: { sv: "Historia",      en: "History"          }, emoji: "📜" },
-  { key: "geografi",      group: "curriculum", label: { sv: "Geografi",      en: "Geography"        }, emoji: "🗺️" },
-  // General knowledge
-  { key: "gk",            group: "general",    label: { sv: "Allmänbildning", en: "General knowledge"}, emoji: "🧠" },
-  { key: "nature",        group: "general",    label: { sv: "Natur & djur",   en: "Nature & animals" }, emoji: "🦋" },
-  { key: "space",         group: "general",    label: { sv: "Rymden",         en: "Space"            }, emoji: "🚀" },
-  { key: "animals",       group: "general",    label: { sv: "Djur",           en: "Animals"          }, emoji: "🐾" },
-  { key: "inventions",    group: "general",    label: { sv: "Uppfinningar",   en: "Inventions"       }, emoji: "💡" },
-  { key: "geography_gk",  group: "general",    label: { sv: "Länder & flaggor","en": "Countries & flags"}, emoji: "🏳️" },
-  { key: "sports",        group: "general",    label: { sv: "Sport & rekord", en: "Sport & records"  }, emoji: "🏆" },
-  { key: "art_music",     group: "general",    label: { sv: "Konst & musik",  en: "Art & music"      }, emoji: "🎨" },
-  { key: "food_culture",  group: "general",    label: { sv: "Mat & kulturer", en: "Food & cultures"  }, emoji: "🍜" },
-  { key: "logic_puzzle",  group: "general",    label: { sv: "Logik & pussel", en: "Logic & puzzles"  }, emoji: "🧩" },
-  { key: "wordgames",     group: "general",    label: { sv: "Ordlekar",       en: "Word games"       }, emoji: "🔤" },
-  { key: "mindreader",    group: "general",    label: { sv: "Magi & illusioner","en": "Magic & illusions"}, emoji: "🎩" },
-  { key: "philosophy",    group: "general",    label: { sv: "Tankeexperiment","en": "Thought experiments"}, emoji: "🤔" },
-  { key: "technology",    group: "general",    label: { sv: "Teknik & internet","en": "Tech & internet"}, emoji: "💻" },
+  // ── Lgr22 subjects ──
+  { key: "svenska",     label: { sv: "Svenska",           en: "Swedish"             }, emoji: "📝" },
+  { key: "engelska",    label: { sv: "Engelska",          en: "English"             }, emoji: "🇬🇧" },
+  { key: "matematik",   label: { sv: "Matematik",         en: "Mathematics"         }, emoji: "🔢" },
+  { key: "biologi",     label: { sv: "Biologi",           en: "Biology"             }, emoji: "🌿" },
+  { key: "kemi",        label: { sv: "Kemi",              en: "Chemistry"           }, emoji: "⚗️" },
+  { key: "fysik",       label: { sv: "Fysik",             en: "Physics"             }, emoji: "⚡" },
+  { key: "teknik",      label: { sv: "Teknik",            en: "Technology"          }, emoji: "⚙️" },
+  { key: "historia",    label: { sv: "Historia",          en: "History"             }, emoji: "📜" },
+  { key: "geografi",    label: { sv: "Geografi",          en: "Geography"           }, emoji: "🗺️" },
+  { key: "samhalle",    label: { sv: "Samhällskunskap",   en: "Civics"              }, emoji: "🏛️" },
+  { key: "religion",    label: { sv: "Religionskunskap",  en: "RE"                  }, emoji: "☮️" },
+  { key: "bild",        label: { sv: "Bild",              en: "Art"                 }, emoji: "🎨" },
+  { key: "musik",       label: { sv: "Musik",             en: "Music"               }, emoji: "🎵" },
+  { key: "idrott",      label: { sv: "Idrott & hälsa",   en: "PE & Health"         }, emoji: "🏃" },
+  { key: "hkk",         label: { sv: "Hem & konsument",  en: "Home economics"      }, emoji: "🍳" },
+  // ── Cross-curricular / fun ──
+  { key: "logik",       label: { sv: "Logik & pussel",   en: "Logic & puzzles"     }, emoji: "🧩" },
+  { key: "ordlekar",    label: { sv: "Ordlekar",         en: "Word games"          }, emoji: "🔤" },
+  { key: "tanke",       label: { sv: "Tankeexperiment",  en: "Thought experiments" }, emoji: "🤔" },
+  { key: "rymden",      label: { sv: "Rymden",           en: "Space"               }, emoji: "🚀" },
+  { key: "djur",        label: { sv: "Djur & natur",     en: "Animals & nature"    }, emoji: "🦋" },
+  { key: "lander",      label: { sv: "Länder & flaggor", en: "Countries & flags"   }, emoji: "🏳️" },
+  { key: "sport",       label: { sv: "Sport & rekord",   en: "Sport & records"     }, emoji: "🏆" },
+  { key: "uppfinningar",label: { sv: "Uppfinningar",     en: "Inventions"          }, emoji: "💡" },
+  { key: "mat",         label: { sv: "Mat & kulturer",   en: "Food & cultures"     }, emoji: "🍜" },
+  { key: "internet",    label: { sv: "Digital värld",    en: "Digital world"       }, emoji: "💻" },
+  { key: "magi",        label: { sv: "Magi & illusioner",en: "Magic & illusions"   }, emoji: "🎩" },
+  { key: "allmant",     label: { sv: "Allmänbildning",   en: "General knowledge"   }, emoji: "🧠" },
 ];
 
 // ── Supabase helpers (reuse pattern from bankAPI) ────────────────────────
@@ -418,209 +424,191 @@ function FillerEmailModal({ item, language, onClose }) {
 }
 
 // ── Main FillerBankView ───────────────────────────────────────────────────
+// Inject dot-pulse keyframes for the filler generation animation
+(function() {
+  if (!document.getElementById("filler-keyframes")) {
+    const s = document.createElement("style");
+    s.id = "filler-keyframes";
+    s.textContent = `@keyframes dot-pulse { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }`;
+    document.head.appendChild(s);
+  }
+})();
+
+
 window.FillerBankView = function FillerBankView({ config, onClose }) {
   window.useFillerVersion();
 
-  const language = config?.language || "sv";
-  const isSv = language !== "en";
+  const language  = config?.language || "sv";
+  const isSv      = language !== "en";
 
-  const [yearBand,  setYearBand]  = useState_filler("");
-  const [category,  setCategory]  = useState_filler("");
+  const [category,   setCategory]   = useState_filler("");
   const [generating, setGenerating] = useState_filler(false);
+  const [showAnim,   setShowAnim]   = useState_filler(false);
   const [error,      setError]      = useState_filler("");
   const [emailItem,  setEmailItem]  = useState_filler(null);
   const [refreshing, setRefreshing] = useState_filler(false);
 
-  // Refresh on first open
+  // Pick a sensible default year band from the lesson context — or just F-3
+  const yearBand = "all";   // we use "all" as a signal to show across bands
+  const TOP_N = 5;
+
   useEffect_filler(() => {
     setRefreshing(true);
     window.fillerAPI.refresh().finally(() => setRefreshing(false));
   }, []);
 
   const hasKey = config && (
-    (config.provider === "gemini" && config.geminiKey) ||
+    (config.provider === "gemini"    && config.geminiKey)    ||
     (config.provider === "anthropic" && config.anthropicKey) ||
-    (config.provider === "openai" && config.openaiKey) ||
-    (config.provider === "grok" && config.grokKey) ||
-    (config.provider === "local" && config.localUrl)
+    (config.provider === "openai"    && config.openaiKey)    ||
+    (config.provider === "grok"      && config.grokKey)      ||
+    (config.provider === "local"     && config.localUrl)
   );
 
+  // Get top-N activities for selected category across all year bands
   const pool = useMemo_filler(() => {
-    if (!yearBand || !category) return [];
-    return window.fillerAPI.getPool({ yearBand, category });
-  }, [yearBand, category, window.useFillerVersion()]);
-
-  const poolFull = pool.length >= FILLER_POOL_LIMIT;
+    if (!category) return [];
+    const all = window.fillerAPI.all().filter(a => a.category === category && a.status === "active");
+    // sort by avg rating desc, then newest
+    return all
+      .sort((a, b) => (b._avgRating || 0) - (a._avgRating || 0) || new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, TOP_N);
+  }, [category]);
 
   const currentProviderModel = () => {
     const p = config?.provider;
-    const modelMap = { gemini: config?.geminiModel, anthropic: config?.anthropicModel, openai: config?.openaiModel, grok: config?.grokModel, local: config?.localModel };
-    return { provider: p, model: modelMap[p] || "" };
+    const m = { gemini: config?.geminiModel, anthropic: config?.anthropicModel, openai: config?.openaiModel, grok: config?.grokModel, local: config?.localModel };
+    return { provider: p, model: m[p] || "" };
   };
 
   const generate = async () => {
-    if (!yearBand || !category || !hasKey || generating) return;
-    setError(""); setGenerating(true);
+    if (!category || !hasKey || generating) return;
+    setError(""); setGenerating(true); setShowAnim(true);
+    // pick the most relevant year band based on what's already in the pool or default
+    const yb = window.FILLER_YEAR_BANDS[1].key; // default 4-6
     try {
-      const prompt = window.fillerPrompt({ yearBand, category, language });
+      const prompt = window.fillerPrompt({ yearBand: yb, category, language });
       const result = await window.runLLM(config, prompt);
       const { provider, model } = currentProviderModel();
-      await window.fillerAPI.add({ yearBand, category, language, activity: result, provider, model });
+      await window.fillerAPI.add({ yearBand: yb, category, language, activity: result, provider, model });
     } catch(e) {
-      if (e.code === "pool_full") setError(isSv ? "Poolen är full (3/3). Betygsätt befintliga för att avgöra vilken är bäst." : "Pool full (3/3). Rate existing activities to rank them.");
-      else setError(e.message);
-    } finally { setGenerating(false); }
+      setError(e.message);
+    } finally {
+      setGenerating(false); setShowAnim(false);
+    }
   };
-
-  const curriculumCats = window.FILLER_CATEGORIES.filter(c => c.group === "curriculum");
-  const generalCats    = window.FILLER_CATEGORIES.filter(c => c.group === "general");
 
   const catLabel = (c) => language === "en" ? c.label.en : c.label.sv;
-  const ybLabel  = (b) => {
-    const found = window.FILLER_YEAR_BANDS.find(y => y.key === b);
-    return found ? (language === "en" ? found.label.en : found.label.sv) : b;
-  };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "var(--radius-lg)", maxWidth: 720, width: "100%", marginTop: 20, marginBottom: 40 }}>
+    <div style={{ padding: "0 0 40px" }}>
 
-        {/* Header */}
-        <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 600 }}>⏱️ {isSv ? "Tidsfördriv-banken" : "Time-Filler Bank"}</h2>
-            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-              {isSv
-                ? "Engagerande 10-20 min aktiviteter för vikarier — inga förberedelser, allt inbäddat."
-                : "Engaging 10-20 min activities for substitutes — no prep, everything embedded."}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            {refreshing && <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>…</span>}
-            <button onClick={() => { setRefreshing(true); window.fillerAPI.refresh().finally(() => setRefreshing(false)); }} style={window.smallBtn}>↻</button>
-            <button onClick={onClose} style={{ ...window.smallBtn, padding: "5px 9px" }}>✕</button>
-          </div>
+      {/* Subheader */}
+      <div style={{ padding: "14px 0 18px", borderBottom: "1px solid var(--border-subtle)", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
+          {isSv
+            ? "Engagerande 10-20 min aktiviteter för vikarier — inga förberedelser, allt inbäddat."
+            : "Engaging 10–20 min activities for substitutes — no prep, everything embedded."}
+        </p>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {refreshing && <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>…</span>}
+          <button onClick={() => { setRefreshing(true); window.fillerAPI.refresh().finally(() => setRefreshing(false)); }} style={window.smallBtn}>↻</button>
         </div>
+      </div>
 
-        <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Flat category chips */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+        {isSv ? "Välj kategori" : "Select category"}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 24 }}>
+        {window.FILLER_CATEGORIES.map(c => {
+          const active = category === c.key;
+          return (
+            <button key={c.key} onClick={() => { setCategory(c.key); setError(""); }} style={{
+              padding: "6px 12px", fontSize: 12, fontWeight: 500,
+              background: active ? "var(--accent)" : "var(--bg-secondary)",
+              color: active ? "#fff" : "var(--text-primary)",
+              border: `1px solid ${active ? "var(--accent)" : "var(--border-default)"}`,
+              borderRadius: 999, cursor: "pointer", transition: "all 0.12s",
+            }}>{c.emoji} {catLabel(c)}</button>
+          );
+        })}
+      </div>
 
-          {/* Year band picker */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-              {isSv ? "Välj nivå" : "Select level"}
+      {/* Results */}
+      {category && (
+        <div>
+          {/* Row: label + generate button */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {catLabel(window.FILLER_CATEGORIES.find(c => c.key === category))}
+              <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>
+                {isSv ? `Visar topp ${Math.min(pool.length, TOP_N)}` : `Showing top ${Math.min(pool.length, TOP_N)}`}
+              </span>
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {window.FILLER_YEAR_BANDS.map(b => (
-                <button key={b.key} onClick={() => setYearBand(b.key)} style={{
-                  padding: "8px 14px", fontSize: 13, fontWeight: 500,
-                  background: yearBand === b.key ? "var(--accent)" : "var(--bg-surface)",
-                  color: yearBand === b.key ? "#fff" : "var(--text-primary)",
-                  border: `1px solid ${yearBand === b.key ? "var(--accent)" : "var(--border-default)"}`,
-                  borderRadius: "var(--radius-md)", cursor: "pointer", transition: "all 0.12s",
-                }}>{language === "en" ? b.label.en : b.label.sv}</button>
-              ))}
-            </div>
+            <button onClick={generate} disabled={generating || !hasKey} style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "8px 16px", fontSize: 13, fontWeight: 600,
+              background: "#F5C518", color: "#3A2C00",
+              border: "1px solid #C9A013", borderRadius: "var(--radius-md)",
+              cursor: (generating || !hasKey) ? "not-allowed" : "pointer",
+              opacity: (generating || !hasKey) ? 0.6 : 1,
+            }}>
+              {generating
+                ? <><span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>⟳</span> {isSv ? "Genererar…" : "Generating…"}</>
+                : <>{isSv ? "✨ Skapa ny aktivitet" : "✨ Create new activity"}</>
+              }
+            </button>
           </div>
 
-          {/* Category picker */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-              {isSv ? "Välj kategori" : "Select category"}
+          {!hasKey && (
+            <div style={{ padding: "10px 12px", background: "var(--warning-bg)", color: "var(--warning-text)", borderRadius: "var(--radius-sm)", fontSize: 12, marginBottom: 12 }}>
+              {isSv ? "Lägg till en API-nyckel i inställningarna för att generera aktiviteter." : "Add an API key in settings to generate activities."}
             </div>
-            <div style={{ marginBottom: 6, fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>
-              {isSv ? "Ämnen" : "Subjects"}
+          )}
+          {error && (
+            <div style={{ padding: "10px 12px", background: "var(--danger-bg)", color: "var(--danger-text)", borderRadius: "var(--radius-sm)", fontSize: 12, marginBottom: 12 }}>
+              {error}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
-              {curriculumCats.map(c => (
-                <button key={c.key} onClick={() => setCategory(c.key)} style={{
-                  padding: "6px 10px", fontSize: 12, fontWeight: 500,
-                  background: category === c.key ? "var(--accent)" : "var(--bg-secondary)",
-                  color: category === c.key ? "#fff" : "var(--text-primary)",
-                  border: `1px solid ${category === c.key ? "var(--accent)" : "var(--border-default)"}`,
-                  borderRadius: 999, cursor: "pointer", transition: "all 0.12s",
-                }}>{c.emoji} {catLabel(c)}</button>
-              ))}
-            </div>
-            <div style={{ marginBottom: 6, fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>
-              {isSv ? "Allmänbildning & kul" : "General knowledge & fun"}
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-              {generalCats.map(c => (
-                <button key={c.key} onClick={() => setCategory(c.key)} style={{
-                  padding: "6px 10px", fontSize: 12, fontWeight: 500,
-                  background: category === c.key ? "#F5C518" : "var(--bg-secondary)",
-                  color: category === c.key ? "#3A2C00" : "var(--text-primary)",
-                  border: `1px solid ${category === c.key ? "#C9A013" : "var(--border-default)"}`,
-                  borderRadius: 999, cursor: "pointer", transition: "all 0.12s",
-                }}>{c.emoji} {catLabel(c)}</button>
-              ))}
-            </div>
-          </div>
+          )}
 
-          {/* Results area */}
-          {yearBand && category && (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>
-                  {ybLabel(yearBand)} · {catLabel(window.FILLER_CATEGORIES.find(c => c.key === category))}
-                  <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>
-                    {pool.length}/{FILLER_POOL_LIMIT} {isSv ? "i poolen" : "in pool"}
-                  </span>
-                </div>
-                {!poolFull && hasKey && (
-                  <button onClick={generate} disabled={generating} style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "8px 14px", fontSize: 13, fontWeight: 600,
-                    background: "#F5C518", color: "#3A2C00",
-                    border: "1px solid #C9A013", borderRadius: "var(--radius-md)", cursor: generating ? "wait" : "pointer",
-                    opacity: generating ? 0.7 : 1,
-                  }}>
-                    {generating
-                      ? <><span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>⟳</span> {isSv ? "Genererar…" : "Generating…"}</>
-                      : <>{isSv ? "✨ Generera ny aktivitet" : "✨ Generate new activity"}</>
-                    }
-                  </button>
-                )}
-                {poolFull && (
-                  <span style={{ fontSize: 11, color: "var(--warning-text)", background: "var(--warning-bg)", padding: "4px 10px", borderRadius: 999, border: "1px solid var(--warning-border)" }}>
-                    {isSv ? "Pool full — betygsätt för att ranka" : "Pool full — rate to rank"}
-                  </span>
-                )}
+          {/* Generation animation overlay */}
+          {showAnim && (
+            <div style={{ padding: "32px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 32 }}>⏱️</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                {isSv ? "Skapar aktivitet…" : "Creating activity…"}
               </div>
-
-              {error && (
-                <div style={{ padding: "10px 12px", background: "var(--danger-bg)", color: "var(--danger-text)", borderRadius: "var(--radius-sm)", fontSize: 12, marginBottom: 12 }}>
-                  {error}
-                </div>
-              )}
-
-              {!hasKey && (
-                <div style={{ padding: "10px 12px", background: "var(--warning-bg)", color: "var(--warning-text)", borderRadius: "var(--radius-sm)", fontSize: 12, marginBottom: 12 }}>
-                  {isSv ? "Lägg till en API-nyckel i inställningarna för att generera aktiviteter." : "Add an API key in settings to generate activities."}
-                </div>
-              )}
-
-              {pool.length === 0 && !generating && (
-                <div style={{ padding: 32, textAlign: "center", color: "var(--text-tertiary)", fontStyle: "italic", border: "1px dashed var(--border-default)", borderRadius: "var(--radius-md)" }}>
-                  {isSv ? "Inga aktiviteter ännu för denna kombination. Generera den första!" : "No activities yet for this combination. Generate the first one!"}
-                </div>
-              )}
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {pool.map(item => (
-                  <FillerCard key={item.filler_id} item={item} language={language} onEmail={setEmailItem} />
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                {isSv ? "Kan ta 30–60 sekunder." : "May take 30–60 seconds."}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "#F5C518", animation: `dot-pulse 1.4s ease-in-out ${i*0.2}s infinite` }} />
                 ))}
               </div>
             </div>
           )}
 
-          {!yearBand && (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--text-tertiary)" }}>
-              {isSv ? "Välj nivå och kategori för att se eller skapa aktiviteter." : "Select a level and category to browse or create activities."}
+          {pool.length === 0 && !generating && (
+            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-tertiary)", fontStyle: "italic", border: "1px dashed var(--border-default)", borderRadius: "var(--radius-md)" }}>
+              {isSv ? "Inga aktiviteter ännu — skapa den första!" : "No activities yet — create the first one!"}
             </div>
           )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {pool.map((item, idx) => (
+              <FillerCard key={item.filler_id} item={item} language={language} rank={idx + 1} onEmail={setEmailItem} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {!category && !refreshing && (
+        <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-tertiary)" }}>
+          {isSv ? "Välj en kategori ovan för att bläddra eller skapa aktiviteter." : "Pick a category above to browse or create activities."}
+        </div>
+      )}
 
       {emailItem && <FillerEmailModal item={emailItem} language={language} onClose={() => setEmailItem(null)} />}
     </div>
