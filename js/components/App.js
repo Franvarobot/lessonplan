@@ -476,13 +476,26 @@ function App() {
             {config.schoolName && <button onClick={() => setShowSchoolPicker(true)} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 10px", fontSize: 12, fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", cursor: "pointer" }}>🏫 {config.schoolName}</button>}
             <Button variant="secondary" icon={<Icon name="settings" size={14} />} onClick={() => setShowSettings(true)}>{t.apiSettings}</Button>
             <Button variant="secondary" icon={<Icon name="book" size={14} />} onClick={() => setShowBank(true)} title={t.bankTitle}>{t.bankButton} <window.SavedCountInline /></Button>
-            <Button variant="yellow" icon={<span style={{fontSize:12}}>⏱️</span>} onClick={() => setShowFillerBank(true)}>{config.language === "sv" ? "Tidsfördriv" : "Fillers"}</Button>
           </div>
         </header>
 
         <div className="no-print" style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid var(--border-subtle)" }}>
-          {[{ key: "teacher", label: config.language === "sv" ? "📋 Lektionsplan" : "📋 Lesson Plan" }, { key: "sub", label: config.language === "sv" ? "☕ Vikarielektion" : "☕ Substitute Lesson" }].map(tab => (
-            <button key={tab.key} onClick={() => setPageTab(tab.key)} style={{ padding: "10px 20px", fontSize: 13, fontWeight: 600, background: "transparent", border: "none", borderBottom: pageTab === tab.key ? "2px solid var(--accent)" : "2px solid transparent", marginBottom: -2, color: pageTab === tab.key ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", transition: "all 0.15s" }}>{tab.label}</button>
+          {[
+            { key: "teacher", label: config.language === "sv" ? "📋 Lektionsplan" : "📋 Lesson Plan" },
+            { key: "sub",     label: config.language === "sv" ? "☕ Vikarielektion" : "☕ Substitute Lesson" },
+            { key: "filler",  label: config.language === "sv" ? "⏱️ Tidsfördriv" : "⏱️ Fillers" },
+          ].map(tab => (
+            <button key={tab.key} onClick={() => {
+              if (tab.key === "filler") { setShowFillerBank(true); }
+              else { setPageTab(tab.key); }
+            }} style={{
+              padding: "10px 20px", fontSize: 13, fontWeight: 600,
+              background: "transparent", border: "none",
+              borderBottom: pageTab === tab.key ? "2px solid var(--accent)" : tab.key === "filler" ? "2px solid #C9A013" : "2px solid transparent",
+              marginBottom: -2,
+              color: pageTab === tab.key ? "var(--accent)" : tab.key === "filler" ? "#7A5800" : "var(--text-secondary)",
+              cursor: "pointer", transition: "all 0.15s",
+            }}>{tab.label}</button>
           ))}
         </div>
 
