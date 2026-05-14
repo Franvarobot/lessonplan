@@ -102,12 +102,14 @@ window.fillerAPI = {
     if (idx >= 0) cache.activities[idx] = item;
     else cache.activities.push(item);
     saveFillerCache(cache);
+    window.dispatchEvent(new Event("lp-filler-change"));
   },
 
   async refresh() {
     try {
       const rows = await _fbGet("status=eq.active&order=created_at.desc");
       saveFillerCache({ activities: rows, fetchedAt: Date.now() });
+      window.dispatchEvent(new Event("lp-filler-change"));
       return rows;
     } catch(e) { console.warn("Filler refresh failed (table may not exist yet):", e.message); return []; }
   },
@@ -436,8 +438,6 @@ function FillerEmailModal({ item, language, onClose }) {
 
 
 window.FillerBankView = function FillerBankView({ config, onClose }) {
-  window.useFillerVersion();
-
   const language  = config?.language || "sv";
   const isSv      = language !== "en";
 
@@ -466,6 +466,7 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
   );
 
   // Get top-N activities for selected category across all year bands
+  const tick = window.useFillerVersion();
   const pool = useMemo_filler(() => {
     if (!category) return [];
     const all = window.fillerAPI.all().filter(a => a.category === category && a.status === "active");
@@ -473,7 +474,7 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
     return all
       .sort((a, b) => (b._avgRating || 0) - (a._avgRating || 0) || new Date(b.created_at) - new Date(a.created_at))
       .slice(0, TOP_N);
-  }, [category]);
+  }, [category, tick]);
 
   const currentProviderModel = () => {
     const p = config?.provider;
@@ -491,8 +492,10 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
       const result = await window.runLLM(config, prompt);
       const { provider, model } = currentProviderModel();
       await window.fillerAPI.add({ yearBand: yb, category, language, activity: result, provider, model });
+      // Sync from Supabase to get the canonical record
+      await window.fillerAPI.refresh();
     } catch(e) {
-      setError(e.message);
+      setError(String(e.message || e));
     } finally {
       setGenerating(false); setShowAnim(false);
     }
