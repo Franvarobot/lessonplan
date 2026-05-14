@@ -36,6 +36,24 @@ window.RatingWidget = function RatingWidget({ lessonId, schoolId, existingAvg, r
   );
 };
 
+
+// Simple error boundary to show errors instead of white page
+class LessonErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 20, background: "var(--danger-bg)", border: "1px solid var(--danger-text)", borderRadius: 8, margin: 16, fontSize: 13, color: "var(--danger-text)" }}>
+          <strong>Render error:</strong> {String(this.state.error.message)}
+          <br /><button onClick={() => this.setState({ error: null })} style={{ marginTop: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>Dismiss</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   const Icon = window.Icon; const Button = window.Button; const Field = window.Field;
   const Input = window.Input; const Select = window.Select; const LangToggle = window.LangToggle;
@@ -432,7 +450,7 @@ function App() {
       {generatingSub && window.SubGenerationAnimation && <window.SubGenerationAnimation language={config.language} />}
 
       {showEmailPackage && acceptedLesson && window.SubEmailPackage && (
-        <window.SubEmailPackage lesson={acceptedLesson} stage={stage} grade={grade} subject={subject} topic={topic} duration={duration} t={t} onClose={() => setShowEmailPackage(false)} />
+        <window.SubEmailPackage lesson={acceptedLesson} stage={stage} grade={grade} subject={subject} topic={topic} duration={duration} language={config.language} t={t} onClose={() => setShowEmailPackage(false)} />
       )}
       {showFillerBank && window.FillerBankView && (
         <window.FillerBankView config={config} onClose={() => setShowFillerBank(false)} />
@@ -511,6 +529,7 @@ function App() {
               </div>
             )}
 
+            <LessonErrorBoundary>
             <window.LessonCardWithTabs
               lesson={acceptedLesson} t={t} language={config.language}
               extrasEnabled={acceptedLesson.isSub ? {} : extrasEnabled}
@@ -522,6 +541,7 @@ function App() {
               onMarkUsed={markLessonUsed}
               onSubmitFeedback={null}
             />
+            </LessonErrorBoundary>
           </div>
         )}
 
