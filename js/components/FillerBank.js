@@ -1,0 +1,628 @@
+// ============================================================
+// FillerBank — standalone sub time-filler activity bank.
+// Categories: curriculum subjects + general (GK, nature, space, etc.)
+// Pool of 3 per (year-band × category), rated 1-10, top rises.
+// Subs can browse and email any filler activity.
+// Depends on: Icon.js, bankAPI.js, storage.js, api.js, prompts (fillerPrompt)
+// ============================================================
+
+const { useState: useState_filler, useEffect: useEffect_filler, useMemo: useMemo_filler } = React;
+
+// ── Category definitions ──────────────────────────────────────────────────
+
+window.FILLER_YEAR_BANDS = [
+  { key: "F-3",  label: { sv: "F-3 (Lågstadiet)",  en: "F-3 (Lower primary)"  } },
+  { key: "4-6",  label: { sv: "4-6 (Mellanstadiet)", en: "4-6 (Middle primary)"  } },
+  { key: "7-9",  label: { sv: "7-9 (Högstadiet)",   en: "7-9 (Lower secondary)" } },
+  { key: "Gym",  label: { sv: "Gymnasiet",           en: "Upper secondary"       } },
+];
+
+window.FILLER_CATEGORIES = [
+  // Curriculum
+  { key: "svenska",       group: "curriculum", label: { sv: "Svenska",       en: "Swedish"          }, emoji: "📝" },
+  { key: "matematik",     group: "curriculum", label: { sv: "Matematik",     en: "Mathematics"      }, emoji: "🔢" },
+  { key: "engelska",      group: "curriculum", label: { sv: "Engelska",      en: "English"          }, emoji: "🇬🇧" },
+  { key: "no",            group: "curriculum", label: { sv: "NO/Naturkunskap",en: "Science"          }, emoji: "🔬" },
+  { key: "so",            group: "curriculum", label: { sv: "SO/Samhälle",   en: "Social studies"   }, emoji: "🌍" },
+  { key: "historia",      group: "curriculum", label: { sv: "Historia",      en: "History"          }, emoji: "📜" },
+  { key: "geografi",      group: "curriculum", label: { sv: "Geografi",      en: "Geography"        }, emoji: "🗺️" },
+  // General knowledge
+  { key: "gk",            group: "general",    label: { sv: "Allmänbildning", en: "General knowledge"}, emoji: "🧠" },
+  { key: "nature",        group: "general",    label: { sv: "Natur & djur",   en: "Nature & animals" }, emoji: "🦋" },
+  { key: "space",         group: "general",    label: { sv: "Rymden",         en: "Space"            }, emoji: "🚀" },
+  { key: "animals",       group: "general",    label: { sv: "Djur",           en: "Animals"          }, emoji: "🐾" },
+  { key: "inventions",    group: "general",    label: { sv: "Uppfinningar",   en: "Inventions"       }, emoji: "💡" },
+  { key: "geography_gk",  group: "general",    label: { sv: "Länder & flaggor","en": "Countries & flags"}, emoji: "🏳️" },
+  { key: "sports",        group: "general",    label: { sv: "Sport & rekord", en: "Sport & records"  }, emoji: "🏆" },
+  { key: "art_music",     group: "general",    label: { sv: "Konst & musik",  en: "Art & music"      }, emoji: "🎨" },
+  { key: "food_culture",  group: "general",    label: { sv: "Mat & kulturer", en: "Food & cultures"  }, emoji: "🍜" },
+  { key: "logic_puzzle",  group: "general",    label: { sv: "Logik & pussel", en: "Logic & puzzles"  }, emoji: "🧩" },
+  { key: "wordgames",     group: "general",    label: { sv: "Ordlekar",       en: "Word games"       }, emoji: "🔤" },
+  { key: "mindreader",    group: "general",    label: { sv: "Magi & illusioner","en": "Magic & illusions"}, emoji: "🎩" },
+  { key: "philosophy",    group: "general",    label: { sv: "Tankeexperiment","en": "Thought experiments"}, emoji: "🤔" },
+  { key: "technology",    group: "general",    label: { sv: "Teknik & internet","en": "Tech & internet"}, emoji: "💻" },
+];
+
+// ── Supabase helpers (reuse pattern from bankAPI) ────────────────────────
+const FILLER_POOL_LIMIT = 3;
+
+function _fbUrl(query = "") {
+  return `${window.SUPABASE_URL}/rest/v1/filler_activities${query ? `?${query}` : ""}`;
+}
+function _fbHeaders(extra = {}) {
+  return { "Content-Type": "application/json", "apikey": window.SUPABASE_ANON_KEY, "Authorization": `Bearer ${window.SUPABASE_ANON_KEY}`, "Prefer": "return=representation", ...extra };
+}
+async function _fbGet(query = "") {
+  const r = await fetch(_fbUrl(query), { headers: _fbHeaders() });
+  if (!r.ok) throw new Error(`Filler GET failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function _fbPost(body) {
+  const r = await fetch(_fbUrl(), { method: "POST", headers: _fbHeaders(), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`Filler POST failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function _fbPatch(query, body) {
+  const r = await fetch(_fbUrl(query), { method: "PATCH", headers: _fbHeaders(), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`Filler PATCH failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+// ── Local cache ───────────────────────────────────────────────────────────
+const FILLER_CACHE_KEY = "lektionsplaneraren-filler-cache-v1";
+
+function loadFillerCache() {
+  try { const r = localStorage.getItem(FILLER_CACHE_KEY); return r ? JSON.parse(r) : { activities: [], fetchedAt: 0 }; }
+  catch { return { activities: [], fetchedAt: 0 }; }
+}
+function saveFillerCache(data) {
+  try { localStorage.setItem(FILLER_CACHE_KEY, JSON.stringify(data)); window.dispatchEvent(new Event("lp-filler-change")); }
+  catch(e) { console.error("Filler cache save failed", e); }
+}
+
+// ── fillerAPI ─────────────────────────────────────────────────────────────
+window.fillerAPI = {
+  all()    { return loadFillerCache().activities || []; },
+  active() { return this.all().filter(a => a.status === "active"); },
+  getPool({ yearBand, category }) {
+    return this.active()
+      .filter(a => a.year_band === yearBand && a.category === category)
+      .sort((a, b) => (b._avgRating ?? 0) - (a._avgRating ?? 0))
+      .slice(0, FILLER_POOL_LIMIT);
+  },
+  cacheUpsert(item) {
+    const cache = loadFillerCache();
+    const idx = cache.activities.findIndex(a => a.filler_id === item.filler_id);
+    if (idx >= 0) cache.activities[idx] = item;
+    else cache.activities.push(item);
+    saveFillerCache(cache);
+  },
+
+  async refresh() {
+    try {
+      const rows = await _fbGet("status=eq.active&order=created_at.desc");
+      saveFillerCache({ activities: rows, fetchedAt: Date.now() });
+      return rows;
+    } catch(e) { console.warn("Filler refresh failed (table may not exist yet):", e.message); return []; }
+  },
+
+  async add({ yearBand, category, language, activity, provider, model }) {
+    // Check pool first
+    const pool = await _fbGet(`year_band=eq.${encodeURIComponent(yearBand)}&category=eq.${encodeURIComponent(category)}&status=eq.active&select=filler_id`);
+    if (pool.length >= FILLER_POOL_LIMIT) {
+      const err = new Error("pool_full"); err.code = "pool_full"; throw err;
+    }
+    const [created] = await _fbPost({ year_band: yearBand, category, language, activity_json: activity, provider, model, status: "active" });
+    const item = { ...created, activity: activity };
+    this.cacheUpsert(item);
+    return item;
+  },
+
+  async rate({ fillerId, rating }) {
+    const clamped = Math.min(10, Math.max(1, Math.round(rating)));
+    await _fbPost({ filler_id: fillerId, rating: clamped }); // assumes filler_ratings table
+    // Optimistic cache update
+    const cache = loadFillerCache();
+    const rec = cache.activities.find(a => a.filler_id === fillerId);
+    if (rec) {
+      rec._ratings = [...(rec._ratings || []), clamped];
+      rec._avgRating = rec._ratings.reduce((a, b) => a + b, 0) / rec._ratings.length;
+      rec._ratingCount = rec._ratings.length;
+      saveFillerCache(cache);
+    }
+  },
+};
+
+// ── Filler generation prompt ───────────────────────────────────────────────
+window.fillerPrompt = function fillerPrompt({ yearBand, category, language }) {
+  const cat = window.FILLER_CATEGORIES.find(c => c.key === category);
+  const catLabel = cat ? (language === "en" ? cat.label.en : cat.label.sv) : category;
+  const ybLabel  = yearBand;
+  const isEn = language === "en";
+
+  const langPrefix = isEn
+    ? `**LANGUAGE: English.** Every string value in the JSON MUST be in English.\n\n`
+    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
+  const langInstr = isEn ? "Respond in English." : "Svara på svenska.";
+
+  return `${langPrefix}Du skapar en TIDSFÖRDRIV-AKTIVITET (time-filler) för en vikarie. Aktiviteten ska:
+- Ta 10-20 minuter
+- Kräva NOLL förberedelse — papper, pennor och tavla är det enda tillåtna
+- Vara rolig, engagerande och pedagogisk
+- Fungera utan att vikarien har ämneskunskap
+- Passa: Årskurser/nivå ${ybLabel} · Kategori: ${catLabel}
+- Ha ALLT material inbäddat (alla frågor, facit, instruktioner — inget lämnas åt vikarien att hitta på)
+- Vara lagom utmanande — eleverna ska lyckas men behöva anstränga sig
+
+FORMAT: Välj ETT av dessa format som passar kategorin bäst:
+• Quiz (5-8 frågor med alternativ, facit, bonusrundar)
+• Tankepussel (ett problem eller gåta med steg-för-steg lösning)
+• Ordspel / skrivövning (konkret uppgift med exempelvar)
+• Diskussion (3-4 provocerande frågor med "lyssna-efter" svar)
+• Ritövning / kreativt (tydliga steg, inget konstnärligt kunnande krävs)
+• Tävling (par eller grupp, poängsystem, facit)
+
+${langInstr} Svara ENDAST med giltigt JSON, ingen markdown:
+{
+  "title": "catchy titel (max 8 ord)",
+  "format": "quiz|pussel|ordspel|diskussion|kreativt|tävling",
+  "duration": "10-15 min",
+  "summary": "En mening: vad gör eleverna och varför är det kul",
+  "teacherIntro": "Exakt vad vikarien säger för att introducera aktiviteten (2-3 meningar, entusiastisk ton)",
+  "instructions": [
+    "Numrerat steg 1",
+    "Numrerat steg 2",
+    "Numrerat steg 3"
+  ],
+  "content": {
+    "items": [
+      { "q": "Fråga/uppgift/påstående", "a": "Svar/facit", "note": "Extra info eller bonusfakta (valfritt)" }
+    ]
+  },
+  "boardText": "VERBATIM vad vikarien skriver på tavlan (titel + eventuella regler/poängsystem). \\n för radbrytningar.",
+  "wrapUp": "Hur vikarien avslutar aktiviteten (1-2 meningar, inkl. hur man kårar vinnare om relevant)",
+  "funFact": "En överraskande och rolig faktoid kopplad till temat (1 mening)"
+}`;
+};
+
+// ── React hook for filler cache ──────────────────────────────────────────
+window.useFillerVersion = function useFillerVersion() {
+  const [tick, setTick] = useState_filler(0);
+  useEffect_filler(() => {
+    const onChange = () => setTick(t => t + 1);
+    window.addEventListener("lp-filler-change", onChange);
+    return () => window.removeEventListener("lp-filler-change", onChange);
+  }, []);
+  return tick;
+};
+
+// ── FillerRatingWidget ────────────────────────────────────────────────────
+function FillerRating({ fillerId, existingAvg, ratingCount }) {
+  const [hovered, setHovered] = useState_filler(null);
+  const [submitted, setSubmitted] = useState_filler(false);
+  const [saving, setSaving] = useState_filler(false);
+
+  const handleRate = async (val) => {
+    if (saving || submitted) return;
+    setSaving(true);
+    try { await window.fillerAPI.rate({ fillerId, rating: val }); setSubmitted(true); }
+    catch(e) { console.error("Rate failed", e); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
+        const active = hovered != null ? n <= hovered : (submitted && existingAvg && n <= Math.round(existingAvg));
+        return (
+          <button key={n} onMouseEnter={() => !submitted && setHovered(n)} onMouseLeave={() => !submitted && setHovered(null)}
+            onClick={() => handleRate(n)} disabled={saving || submitted}
+            style={{ width: 20, height: 20, border: "none", borderRadius: 3, cursor: submitted ? "default" : "pointer", fontSize: 10, fontWeight: 600, background: active ? "#C9A013" : "var(--bg-secondary)", color: active ? "#fff" : "var(--text-tertiary)", transition: "all 0.1s" }}>
+            {n}
+          </button>
+        );
+      })}
+      {existingAvg != null && <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>⌀{existingAvg.toFixed(1)} ({ratingCount})</span>}
+      {submitted && <span style={{ fontSize: 10, color: "var(--success-text)", fontWeight: 500 }}>✓</span>}
+    </div>
+  );
+}
+
+// ── FillerCard ────────────────────────────────────────────────────────────
+function FillerCard({ item, language, onEmail }) {
+  const [expanded, setExpanded] = useState_filler(false);
+  const act = item.activity || {};
+  const isSv = language !== "en";
+
+  return (
+    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", overflow: "hidden", background: "var(--bg-surface)" }}>
+      {/* Card header */}
+      <div style={{ padding: "12px 14px", background: item._avgRating >= 8 ? "#FFFDE7" : "var(--bg-surface)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 3 }}>
+              {act.format} · {act.duration}
+              {item._avgRating >= 8 && <span style={{ marginLeft: 6, color: "#C9A013" }}>⭐ Top rated</span>}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{act.title}</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>{act.summary}</div>
+          </div>
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {onEmail && (
+              <button onClick={() => onEmail(item)} title={isSv ? "Skicka till vikarie" : "Email to sub"} style={{ ...window.smallBtn, padding: "4px 8px", fontSize: 11 }}>✉️</button>
+            )}
+            <button onClick={() => setExpanded(e => !e)} style={{ ...window.smallBtn, padding: "4px 8px", fontSize: 11 }}>
+              {expanded ? (isSv ? "Dölj" : "Hide") : (isSv ? "Visa" : "View")} {expanded ? "▴" : "▾"}
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <FillerRating fillerId={item.filler_id} existingAvg={item._avgRating ?? null} ratingCount={item._ratingCount ?? 0} />
+        </div>
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div style={{ padding: "12px 14px", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: 10 }}>
+
+          {/* Board text */}
+          {act.boardText && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+                {isSv ? "📋 Tavlan" : "📋 Board"}
+              </div>
+              <div style={{ background: "#F8F4EB", border: "1px dashed #C9A013", borderRadius: "var(--radius-sm)", padding: "8px 10px", fontSize: 12, fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "pre-wrap" }}>
+                {act.boardText}
+              </div>
+            </div>
+          )}
+
+          {/* Intro */}
+          {act.teacherIntro && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+                {isSv ? "💬 Introduktion" : "💬 Introduction"}
+              </div>
+              <div style={{ fontSize: 13, fontStyle: "italic", color: "var(--text-primary)", padding: "6px 10px", background: "var(--accent-bg)", borderRadius: "var(--radius-sm)" }}>
+                "{act.teacherIntro}"
+              </div>
+            </div>
+          )}
+
+          {/* Instructions */}
+          {act.instructions && act.instructions.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+                {isSv ? "Steg" : "Steps"}
+              </div>
+              <ol style={{ fontSize: 13, lineHeight: 1.55, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4, margin: 0 }}>
+                {act.instructions.map((s, i) => <li key={i}>{String(s).replace(/^\d+\.\s*/, "")}</li>)}
+              </ol>
+            </div>
+          )}
+
+          {/* Content items */}
+          {act.content?.items && act.content.items.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>
+                {isSv ? "Frågor/Uppgifter + Facit" : "Questions/Tasks + Answers"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {act.content.items.map((item, i) => (
+                  <div key={i} style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)", padding: "8px 10px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 3 }}>
+                      {i + 1}. {item.q}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--success-text)" }}>✓ {item.a}</div>
+                    {item.note && <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontStyle: "italic", marginTop: 2 }}>💡 {item.note}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Wrap-up */}
+          {act.wrapUp && (
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", padding: "6px 10px", background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" }}>
+              <strong>{isSv ? "Avslutning: " : "Wrap-up: "}</strong>{act.wrapUp}
+            </div>
+          )}
+
+          {/* Fun fact */}
+          {act.funFact && (
+            <div style={{ fontSize: 12, color: "#6B5410", background: "#FFF8E1", padding: "6px 10px", borderRadius: "var(--radius-sm)" }}>
+              🌟 {act.funFact}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── FillerEmailModal ──────────────────────────────────────────────────────
+function FillerEmailModal({ item, language, onClose }) {
+  const [subEmail, setSubEmail] = useState_filler("");
+  const [copied, setCopied] = useState_filler(false);
+  const isSv = language !== "en";
+  const act = item?.activity || {};
+
+  const body = useMemo_filler(() => {
+    if (!act.title) return "";
+    const lines = [];
+    lines.push(isSv ? "Hej!" : "Hi!");
+    lines.push("");
+    lines.push(isSv ? "Här är en extra aktivitet om du behöver fylla ut tid:" : "Here is a spare-time activity if you need to fill time:");
+    lines.push("");
+    lines.push("═".repeat(50));
+    lines.push(`${act.title}  [${act.duration}]`);
+    lines.push("═".repeat(50));
+    lines.push(act.summary || "");
+    lines.push("");
+    if (act.boardText) {
+      lines.push(isSv ? "TAVLAN:" : "BOARD:");
+      act.boardText.split(/\\n|\n/).forEach(l => lines.push("  " + l));
+      lines.push("");
+    }
+    if (act.teacherIntro) {
+      lines.push(isSv ? "SÄTT IGÅNG (säg detta):" : "START (say this):");
+      lines.push(`"${act.teacherIntro}"`);
+      lines.push("");
+    }
+    if (act.instructions?.length) {
+      lines.push(isSv ? "INSTRUKTIONER:" : "INSTRUCTIONS:");
+      act.instructions.forEach((s, i) => lines.push(`${i + 1}. ${String(s).replace(/^\d+\.\s*/, "")}`));
+      lines.push("");
+    }
+    if (act.content?.items?.length) {
+      lines.push(isSv ? "FRÅGOR + FACIT:" : "QUESTIONS + ANSWERS:");
+      act.content.items.forEach((it, i) => {
+        lines.push(`${i + 1}. ${it.q}`);
+        lines.push(`   ✓ ${it.a}`);
+        if (it.note) lines.push(`   💡 ${it.note}`);
+      });
+      lines.push("");
+    }
+    if (act.wrapUp) { lines.push(isSv ? "AVSLUTNING:" : "WRAP-UP:"); lines.push(act.wrapUp); lines.push(""); }
+    if (act.funFact) { lines.push(`🌟 ${act.funFact}`); lines.push(""); }
+    return lines.join("\n");
+  }, [item, isSv]);
+
+  const subject = `${isSv ? "Extra aktivitet" : "Spare-time activity"}: ${act.title}`;
+  const mailtoHref = `mailto:${encodeURIComponent(subEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "var(--radius-lg)", maxWidth: 440, width: "100%", padding: 22 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600 }}>✉️ {isSv ? "Skicka till vikarie" : "Send to sub"}</h3>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", fontSize: 18, cursor: "pointer", color: "var(--text-tertiary)" }}>×</button>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>{isSv ? "Vikariets e-post" : "Sub's email"}</label>
+          <input value={subEmail} onChange={e => setSubEmail(e.target.value)} placeholder="vikarie@skola.se" type="email"
+            style={{ width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--bg-surface)", color: "var(--text-primary)" }} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => { navigator.clipboard.writeText(body); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+            style={{ flex: 1, padding: "9px", fontSize: 12, fontWeight: 600, background: copied ? "var(--success-bg)" : "var(--bg-secondary)", color: copied ? "var(--success-text)" : "var(--text-primary)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", cursor: "pointer" }}>
+            {copied ? "✓ " : "📋 "}{isSv ? "Kopiera" : "Copy"}
+          </button>
+          <a href={mailtoHref} style={{ flex: 2, padding: "9px", fontSize: 12, fontWeight: 600, background: "#F5C518", color: "#3A2C00", border: "1px solid #C9A013", borderRadius: "var(--radius-md)", textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+            ✉️ {isSv ? "Öppna i mejl" : "Open in email"}
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main FillerBankView ───────────────────────────────────────────────────
+window.FillerBankView = function FillerBankView({ config, onClose }) {
+  window.useFillerVersion();
+
+  const language = config?.language || "sv";
+  const isSv = language !== "en";
+
+  const [yearBand,  setYearBand]  = useState_filler("");
+  const [category,  setCategory]  = useState_filler("");
+  const [generating, setGenerating] = useState_filler(false);
+  const [error,      setError]      = useState_filler("");
+  const [emailItem,  setEmailItem]  = useState_filler(null);
+  const [refreshing, setRefreshing] = useState_filler(false);
+
+  // Refresh on first open
+  useEffect_filler(() => {
+    setRefreshing(true);
+    window.fillerAPI.refresh().finally(() => setRefreshing(false));
+  }, []);
+
+  const hasKey = config && (
+    (config.provider === "gemini" && config.geminiKey) ||
+    (config.provider === "anthropic" && config.anthropicKey) ||
+    (config.provider === "openai" && config.openaiKey) ||
+    (config.provider === "grok" && config.grokKey) ||
+    (config.provider === "local" && config.localUrl)
+  );
+
+  const pool = useMemo_filler(() => {
+    if (!yearBand || !category) return [];
+    return window.fillerAPI.getPool({ yearBand, category });
+  }, [yearBand, category, window.useFillerVersion()]);
+
+  const poolFull = pool.length >= FILLER_POOL_LIMIT;
+
+  const currentProviderModel = () => {
+    const p = config?.provider;
+    const modelMap = { gemini: config?.geminiModel, anthropic: config?.anthropicModel, openai: config?.openaiModel, grok: config?.grokModel, local: config?.localModel };
+    return { provider: p, model: modelMap[p] || "" };
+  };
+
+  const generate = async () => {
+    if (!yearBand || !category || !hasKey || generating) return;
+    setError(""); setGenerating(true);
+    try {
+      const prompt = window.fillerPrompt({ yearBand, category, language });
+      const result = await window.runLLM(config, prompt);
+      const { provider, model } = currentProviderModel();
+      await window.fillerAPI.add({ yearBand, category, language, activity: result, provider, model });
+    } catch(e) {
+      if (e.code === "pool_full") setError(isSv ? "Poolen är full (3/3). Betygsätt befintliga för att avgöra vilken är bäst." : "Pool full (3/3). Rate existing activities to rank them.");
+      else setError(e.message);
+    } finally { setGenerating(false); }
+  };
+
+  const curriculumCats = window.FILLER_CATEGORIES.filter(c => c.group === "curriculum");
+  const generalCats    = window.FILLER_CATEGORIES.filter(c => c.group === "general");
+
+  const catLabel = (c) => language === "en" ? c.label.en : c.label.sv;
+  const ybLabel  = (b) => {
+    const found = window.FILLER_YEAR_BANDS.find(y => y.key === b);
+    return found ? (language === "en" ? found.label.en : found.label.sv) : b;
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "var(--radius-lg)", maxWidth: 720, width: "100%", marginTop: 20, marginBottom: 40 }}>
+
+        {/* Header */}
+        <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 600 }}>⏱️ {isSv ? "Tidsfördriv-banken" : "Time-Filler Bank"}</h2>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+              {isSv
+                ? "Engagerande 10-20 min aktiviteter för vikarier — inga förberedelser, allt inbäddat."
+                : "Engaging 10-20 min activities for substitutes — no prep, everything embedded."}
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {refreshing && <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>…</span>}
+            <button onClick={() => { setRefreshing(true); window.fillerAPI.refresh().finally(() => setRefreshing(false)); }} style={window.smallBtn}>↻</button>
+            <button onClick={onClose} style={{ ...window.smallBtn, padding: "5px 9px" }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 18 }}>
+
+          {/* Year band picker */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              {isSv ? "Välj nivå" : "Select level"}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {window.FILLER_YEAR_BANDS.map(b => (
+                <button key={b.key} onClick={() => setYearBand(b.key)} style={{
+                  padding: "8px 14px", fontSize: 13, fontWeight: 500,
+                  background: yearBand === b.key ? "var(--accent)" : "var(--bg-surface)",
+                  color: yearBand === b.key ? "#fff" : "var(--text-primary)",
+                  border: `1px solid ${yearBand === b.key ? "var(--accent)" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-md)", cursor: "pointer", transition: "all 0.12s",
+                }}>{language === "en" ? b.label.en : b.label.sv}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Category picker */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              {isSv ? "Välj kategori" : "Select category"}
+            </div>
+            <div style={{ marginBottom: 6, fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>
+              {isSv ? "Ämnen" : "Subjects"}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+              {curriculumCats.map(c => (
+                <button key={c.key} onClick={() => setCategory(c.key)} style={{
+                  padding: "6px 10px", fontSize: 12, fontWeight: 500,
+                  background: category === c.key ? "var(--accent)" : "var(--bg-secondary)",
+                  color: category === c.key ? "#fff" : "var(--text-primary)",
+                  border: `1px solid ${category === c.key ? "var(--accent)" : "var(--border-default)"}`,
+                  borderRadius: 999, cursor: "pointer", transition: "all 0.12s",
+                }}>{c.emoji} {catLabel(c)}</button>
+              ))}
+            </div>
+            <div style={{ marginBottom: 6, fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>
+              {isSv ? "Allmänbildning & kul" : "General knowledge & fun"}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {generalCats.map(c => (
+                <button key={c.key} onClick={() => setCategory(c.key)} style={{
+                  padding: "6px 10px", fontSize: 12, fontWeight: 500,
+                  background: category === c.key ? "#F5C518" : "var(--bg-secondary)",
+                  color: category === c.key ? "#3A2C00" : "var(--text-primary)",
+                  border: `1px solid ${category === c.key ? "#C9A013" : "var(--border-default)"}`,
+                  borderRadius: 999, cursor: "pointer", transition: "all 0.12s",
+                }}>{c.emoji} {catLabel(c)}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Results area */}
+          {yearBand && category && (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {ybLabel(yearBand)} · {catLabel(window.FILLER_CATEGORIES.find(c => c.key === category))}
+                  <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>
+                    {pool.length}/{FILLER_POOL_LIMIT} {isSv ? "i poolen" : "in pool"}
+                  </span>
+                </div>
+                {!poolFull && hasKey && (
+                  <button onClick={generate} disabled={generating} style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "8px 14px", fontSize: 13, fontWeight: 600,
+                    background: "#F5C518", color: "#3A2C00",
+                    border: "1px solid #C9A013", borderRadius: "var(--radius-md)", cursor: generating ? "wait" : "pointer",
+                    opacity: generating ? 0.7 : 1,
+                  }}>
+                    {generating
+                      ? <><span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>⟳</span> {isSv ? "Genererar…" : "Generating…"}</>
+                      : <>{isSv ? "✨ Generera ny aktivitet" : "✨ Generate new activity"}</>
+                    }
+                  </button>
+                )}
+                {poolFull && (
+                  <span style={{ fontSize: 11, color: "var(--warning-text)", background: "var(--warning-bg)", padding: "4px 10px", borderRadius: 999, border: "1px solid var(--warning-border)" }}>
+                    {isSv ? "Pool full — betygsätt för att ranka" : "Pool full — rate to rank"}
+                  </span>
+                )}
+              </div>
+
+              {error && (
+                <div style={{ padding: "10px 12px", background: "var(--danger-bg)", color: "var(--danger-text)", borderRadius: "var(--radius-sm)", fontSize: 12, marginBottom: 12 }}>
+                  {error}
+                </div>
+              )}
+
+              {!hasKey && (
+                <div style={{ padding: "10px 12px", background: "var(--warning-bg)", color: "var(--warning-text)", borderRadius: "var(--radius-sm)", fontSize: 12, marginBottom: 12 }}>
+                  {isSv ? "Lägg till en API-nyckel i inställningarna för att generera aktiviteter." : "Add an API key in settings to generate activities."}
+                </div>
+              )}
+
+              {pool.length === 0 && !generating && (
+                <div style={{ padding: 32, textAlign: "center", color: "var(--text-tertiary)", fontStyle: "italic", border: "1px dashed var(--border-default)", borderRadius: "var(--radius-md)" }}>
+                  {isSv ? "Inga aktiviteter ännu för denna kombination. Generera den första!" : "No activities yet for this combination. Generate the first one!"}
+                </div>
+              )}
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {pool.map(item => (
+                  <FillerCard key={item.filler_id} item={item} language={language} onEmail={setEmailItem} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!yearBand && (
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-tertiary)" }}>
+              {isSv ? "Välj nivå och kategori för att se eller skapa aktiviteter." : "Select a level and category to browse or create activities."}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {emailItem && <FillerEmailModal item={emailItem} language={language} onClose={() => setEmailItem(null)} />}
+    </div>
+  );
+};
