@@ -108,9 +108,14 @@ window.fillerAPI = {
   async refresh() {
     try {
       const rows = await _fbGet("status=eq.active&order=created_at.desc");
-      saveFillerCache({ activities: rows, fetchedAt: Date.now() });
+      const mapped = rows.map(r => {
+        let act = r.activity_json || r.activity || {};
+        if (typeof act === "string") { try { act = JSON.parse(act); } catch(e) {} }
+        return { ...r, activity: act };
+      });
+      saveFillerCache({ activities: mapped, fetchedAt: Date.now() });
       window.dispatchEvent(new Event("lp-filler-change"));
-      return rows;
+      return mapped;
     } catch(e) { console.warn("Filler refresh failed (table may not exist yet):", e.message); return []; }
   },
 
@@ -239,7 +244,8 @@ function FillerRating({ fillerId, existingAvg, ratingCount }) {
 // ── FillerCard ────────────────────────────────────────────────────────────
 function FillerCard({ item, language, onEmail }) {
   const [expanded, setExpanded] = useState_filler(false);
-  const act = item.activity || {};
+  let act = item.activity || item.activity_json || {};
+  if (typeof act === "string") { try { act = JSON.parse(act); } catch(e) { act = {}; } }
   const isSv = language !== "en";
 
   return (
@@ -489,9 +495,16 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
     const yb = window.FILLER_YEAR_BANDS[1].key; // default 4-6
     try {
       const prompt = window.fillerPrompt({ yearBand: yb, category, language });
-      const result = await window.runLLM(config, prompt);
+      const raw = await window.runLLM(config, prompt);
+      // Strip markdown fences if present, then parse JSON
+      const clean = (typeof raw === "string")
+        ? raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/,"").trim()
+        : raw;
+      let activity;
+      try { activity = (typeof clean === "string") ? JSON.parse(clean) : clean; }
+      catch(parseErr) { throw new Error("AI response was not valid JSON: " + String(clean).slice(0, 120)); }
       const { provider, model } = currentProviderModel();
-      await window.fillerAPI.add({ yearBand: yb, category, language, activity: result, provider, model });
+      await window.fillerAPI.add({ yearBand: yb, category, language, activity, provider, model });
       // Sync from Supabase to get the canonical record
       await window.fillerAPI.refresh();
     } catch(e) {
