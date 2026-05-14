@@ -13,21 +13,20 @@ window.BankView = function BankView({ onClose, onOpen, onArchive, onRefresh, loa
   window.useBankVersion();
   const lessons = window.bankAPI.active();
 
-  // Group: stage → grade → subject → { teacher: [], sub: [] }
+  // Group: stage → grade → subject → []
   const grouped = useMemo_bank(() => {
     const tree = {};
     for (const l of lessons) {
       const s  = l.stage   || "—";
       const g  = l.grade   || "—";
       const sb = l.subject || "—";
-      tree[s]       = tree[s]       || {};
-      tree[s][g]    = tree[s][g]    || {};
-      tree[s][g][sb] = tree[s][g][sb] || { teacher: [], sub: [] };
-      if (l.is_sub) tree[s][g][sb].sub.push(l);
-      else          tree[s][g][sb].teacher.push(l);
+      tree[s]        = tree[s]        || {};
+      tree[s][g]     = tree[s][g]     || {};
+      tree[s][g][sb] = tree[s][g][sb] || [];
+      tree[s][g][sb].push(l);
     }
     return tree;
-  }, [lessons.length, lessons.map(l => l.lesson_id + l.is_sub).join(",")]);
+  }, [lessons.length, lessons.map(l => l.lesson_id).join(",")]);
 
   const [selectedLesson, setSelectedLesson] = useState_bank(null);
   const stages = Object.keys(grouped);
@@ -104,13 +103,12 @@ window.BankView = function BankView({ onClose, onOpen, onArchive, onRefresh, loa
                             gap: 8,
                           }}>
                             {subjects.map(subject => {
-                              const { teacher, sub } = grouped[stage][grade][subject];
+                              const slots = grouped[stage][grade][subject];
                               return (
                                 <SubjectCell
                                   key={subject}
                                   subject={subject}
-                                  teacher={teacher}
-                                  sub={sub}
+                                  slots={slots}
                                   t={t}
                                   onSelect={setSelectedLesson}
                                 />
@@ -140,11 +138,10 @@ window.BankView = function BankView({ onClose, onOpen, onArchive, onRefresh, loa
   );
 };
 
-// ---- SubjectCell: one card per subject, teacher pool on top (blue), sub pool below (yellow) ----
-function SubjectCell({ subject, teacher, sub, t, onSelect }) {
-  const hasTeacher = teacher.length > 0;
-  const hasSub     = sub.length > 0;
-  const isSv = t.bankEmptySlot === "Tomt";
+// ---- SubjectCell: one card per subject, single pool ----
+function SubjectCell({ subject, slots, t, onSelect }) {
+  const filled = slots.length;
+  const full   = filled >= window.ACTIVE_POOL_LIMIT;
 
   return (
     <div style={{
@@ -160,68 +157,13 @@ function SubjectCell({ subject, teacher, sub, t, onSelect }) {
         background: "var(--bg-secondary)",
         display: "flex", justifyContent: "space-between", alignItems: "center",
       }}>
-        <span style={{ fontSize: 12, fontWeight: 700 }}>{subject}</span>
-        <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontWeight: 600 }}>
-          {teacher.length + sub.length}/{window.ACTIVE_POOL_LIMIT * 2}
-        </span>
-      </div>
-
-      {/* Teacher pool — blue */}
-      <PoolSection
-        slots={teacher}
-        kind="teacher"
-        label={isSv ? "📋 Lärare" : "📋 Teacher"}
-        accentBg="var(--accent-bg)"
-        accentColor="var(--accent)"
-        accentBorder="var(--accent)"
-        slotBg="#EBF2F9"
-        slotColor="var(--accent)"
-        t={t}
-        onSelect={onSelect}
-      />
-
-      {/* Substitute pool — yellow */}
-      <PoolSection
-        slots={sub}
-        kind="sub"
-        label={isSv ? "☕ Vikarie" : "☕ Substitute"}
-        accentBg="#FFF8E1"
-        accentColor="#7A5800"
-        accentBorder="#E8C547"
-        slotBg="#FFFDE7"
-        slotColor="#6B5410"
-        t={t}
-        onSelect={onSelect}
-      />
-    </div>
-  );
-}
-
-// ---- PoolSection: labelled list of slots (filled or empty) ----
-function PoolSection({ slots, kind, label, accentBg, accentColor, accentBorder, slotBg, slotColor, t, onSelect }) {
-  const filled = slots.length;
-  const full   = filled >= window.ACTIVE_POOL_LIMIT;
-
-  return (
-    <div style={{ borderTop: "1px solid var(--border-subtle)" }}>
-      {/* Pool label row */}
-      <div style={{
-        padding: "5px 10px",
-        background: accentBg,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: accentColor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          {label}
-        </span>
-        <span style={{
-          fontSize: 10, fontWeight: 700,
-          color: full ? (kind === "sub" ? "#7A5800" : "var(--accent-hover)") : "var(--text-tertiary)",
-        }}>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>☕ {subject}</span>
+        <span style={{ fontSize: 10, color: full ? "var(--warning-text)" : "var(--text-tertiary)", fontWeight: 600 }}>
           {filled}/{window.ACTIVE_POOL_LIMIT}
         </span>
       </div>
 
-      {/* Slot list */}
+      {/* Lesson slots */}
       <div style={{ padding: "6px 8px", display: "flex", flexDirection: "column", gap: 3 }}>
         {Array.from({ length: window.ACTIVE_POOL_LIMIT }).map((_, i) => {
           const slot = slots[i];
@@ -241,9 +183,9 @@ function PoolSection({ slots, kind, label, accentBg, accentColor, accentBorder, 
             <button key={i} onClick={() => onSelect(slot)} style={{
               textAlign: "left",
               padding: "5px 8px", fontSize: 11,
-              background: used ? "var(--bg-secondary)" : slotBg,
-              color: used ? "var(--text-tertiary)" : slotColor,
-              border: `1px solid ${used ? "var(--border-subtle)" : accentBorder}`,
+              background: used ? "var(--bg-secondary)" : "#FFF8E1",
+              color: used ? "var(--text-tertiary)" : "#6B5410",
+              border: `1px solid ${used ? "var(--border-subtle)" : "#E8C547"}`,
               borderRadius: "var(--radius-sm)",
               cursor: "pointer", fontWeight: 500,
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -258,15 +200,13 @@ function PoolSection({ slots, kind, label, accentBg, accentColor, accentBorder, 
   );
 }
 
+
 // ---- BankLessonDetail: lightweight modal shown over BankView ----
 window.BankLessonDetail = function BankLessonDetail({ lesson, t, onClose, onOpen, onArchive, alreadyUsed }) {
   const l      = lesson.lesson || {};
-  const isSub  = !!lesson.is_sub;
-  const accent = isSub ? "#C9A013" : "var(--accent)";
-  const accentBg = isSub ? "#FFF8E1" : "var(--accent-bg)";
-  const tag    = isSub
-    ? (t.substituteLesson || "Vikarielektion")
-    : (t.language === "en" ? "Teacher lesson" : "Lärarlektion");
+  const accent   = "#C9A013";
+  const accentBg = "#FFF8E1";
+  const tag    = t.substituteLesson || "Vikarielektion";
 
   return (
     <div onClick={onClose} style={{
@@ -283,13 +223,13 @@ window.BankLessonDetail = function BankLessonDetail({ lesson, t, onClose, onOpen
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{
               display: "inline-block", fontSize: 10, fontWeight: 700,
-              color: isSub ? "#7A5800" : "var(--accent)",
+              color: "#7A5800",
               background: accentBg,
               padding: "2px 8px", borderRadius: "var(--radius-sm)",
               textTransform: "uppercase", letterSpacing: "0.04em",
               marginBottom: 6,
             }}>
-              {isSub ? "☕" : "📋"} {tag}
+              ☕ {tag}
             </span>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>{l.title || lesson.topic || "—"}</h3>
           </div>
@@ -303,7 +243,7 @@ window.BankLessonDetail = function BankLessonDetail({ lesson, t, onClose, onOpen
         {l.summary && <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>{l.summary}</p>}
 
         {l.learningGoal && (
-          <div style={{ fontSize: 12, padding: "8px 10px", background: accentBg, color: accent, borderRadius: "var(--radius-sm)", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, padding: "8px 10px", background: accentBg, color: "#7A5800", borderRadius: "var(--radius-sm)", marginBottom: 10 }}>
             <strong>{t.objective}:</strong> {l.learningGoal}
           </div>
         )}
@@ -318,7 +258,7 @@ window.BankLessonDetail = function BankLessonDetail({ lesson, t, onClose, onOpen
           <button onClick={onArchive} style={{ ...window.smallBtn, color: "var(--warning-text)" }}>{t.archive}</button>
           <button onClick={onOpen} style={{
             ...window.smallBtn,
-            background: accent, color: isSub ? "#3A2C00" : "#fff",
+            background: accent, color: "#3A2C00",
             borderColor: accent,
           }}>↗ {t.open}</button>
         </div>
@@ -328,45 +268,44 @@ window.BankLessonDetail = function BankLessonDetail({ lesson, t, onClose, onOpen
 };
 
 // ---- PoolIndicator: small chip near generate buttons ----
-window.PoolIndicator = function PoolIndicator({ stage, grade, subject, isSub = false, t, onOpen }) {
+window.PoolIndicator = function PoolIndicator({ stage, grade, subject, t, onOpen }) {
   window.useBankVersion();
-  const pool = window.bankAPI.getActivePool({ stage, grade, subject, isSub });
+  const pool = window.bankAPI.getActivePool({ stage, grade, subject, isSub: true });
   const full  = pool.length >= window.ACTIVE_POOL_LIMIT;
   if (pool.length === 0) return <span />;
 
-  const isSubStyle = isSub;
-  return (
+    return (
     <button onClick={onOpen} title={full ? t.poolFullTitle : ""} style={{
       display: "inline-flex", alignItems: "center", gap: 6,
       padding: "5px 10px", fontSize: 11, fontWeight: 600,
       background: full
-        ? (isSubStyle ? "#FFF8E1" : "var(--warning-bg)")
-        : (isSubStyle ? "#FFFDE7" : "var(--bg-secondary)"),
+        ? ("#FFF8E1")
+        : ("#FFFDE7"),
       color: full
-        ? (isSubStyle ? "#7A5800" : "var(--warning-text)")
-        : (isSubStyle ? "#6B5410" : "var(--text-secondary)"),
+        ? ("#7A5800")
+        : ("#6B5410"),
       border: "1px solid " + (full
-        ? (isSubStyle ? "#E8C547" : "var(--warning-border)")
-        : (isSubStyle ? "#E8C547" : "var(--border-default)")),
+        ? ("#E8C547")
+        : ("#E8C547")),
       borderRadius: 999, cursor: "pointer",
     }}>
-      <span style={{ fontSize: 13 }}>{isSubStyle ? "☕" : "📚"}</span>
+      <span style={{ fontSize: 13 }}>{"☕"}</span>
       {pool.length}/{window.ACTIVE_POOL_LIMIT} {t.poolBadge}
     </button>
   );
 };
 
 // ---- PoolFullModal ----
-window.PoolFullModal = function PoolFullModal({ stage, grade, subject, isSub = false, onClose, onOpen, onArchiveAndGenerate, t }) {
+window.PoolFullModal = function PoolFullModal({ stage, grade, subject, isSub = true, onClose, onOpen, onArchiveAndGenerate, t }) {
   window.useBankVersion();
   const pool = useMemo_bank(
-    () => window.bankAPI.getActivePool({ stage, grade, subject, isSub }),
-    [stage, grade, subject, isSub]
+    () => window.bankAPI.getActivePool({ stage, grade, subject, isSub: true }),
+    [stage, grade, subject]
   );
 
-  const accent   = isSub ? "#C9A013" : "var(--accent)";
-  const accentBg = isSub ? "#FFF8E1" : "var(--accent-bg)";
-  const label    = isSub
+  const accent   = "#C9A013";
+  const accentBg = "#FFF8E1";
+  const label    = t.poolFullSub || (t.language === "en" ? "Substitute pool full" : "Vikariespool full");
     ? (t.language === "en" ? "Substitute" : "Vikarie")
     : (t.language === "en" ? "Teacher" : "Lärare");
 
@@ -383,8 +322,8 @@ window.PoolFullModal = function PoolFullModal({ stage, grade, subject, isSub = f
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: isSub ? "#7A5800" : "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
-              {isSub ? "☕" : "📋"} {label}
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#7A5800", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>
+              ☕ {label}
             </div>
             <h2 style={{ fontSize: 17, fontWeight: 600 }}>⚠ {t.poolFullTitle}</h2>
           </div>
@@ -417,7 +356,7 @@ window.PoolFullModal = function PoolFullModal({ stage, grade, subject, isSub = f
                 <button onClick={() => onArchiveAndGenerate(rec.lesson_id)} style={{
                   ...window.smallBtn,
                   background: accent,
-                  color: isSub ? "#3A2C00" : "#fff",
+                  color: "#3A2C00",
                   borderColor: accent,
                 }} title={t.archiveAndGenerate}>📦 {t.archive}</button>
               </div>
