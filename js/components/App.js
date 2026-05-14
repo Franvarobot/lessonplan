@@ -76,6 +76,8 @@ function App() {
   const [loadingChoices, setLoadingChoices] = useState_app(false);
   // Separate state for sub generation to show animation
   const [generatingSub, setGeneratingSub] = useState_app(false);
+  const [showEmailPackage, setShowEmailPackage] = useState_app(false);
+  const [showFillerBank, setShowFillerBank] = useState_app(false);
   const [translating, setTranslating] = useState_app(false);
   const [servedFromBank, setServedFromBank] = useState_app(false);
 
@@ -429,6 +431,13 @@ function App() {
       {/* Sub generation animation overlay */}
       {generatingSub && window.SubGenerationAnimation && <window.SubGenerationAnimation language={config.language} />}
 
+      {showEmailPackage && acceptedLesson && window.SubEmailPackage && (
+        <window.SubEmailPackage lesson={acceptedLesson} stage={stage} grade={grade} subject={subject} topic={topic} duration={duration} t={t} onClose={() => setShowEmailPackage(false)} />
+      )}
+      {showFillerBank && window.FillerBankView && (
+        <window.FillerBankView config={config} onClose={() => setShowFillerBank(false)} />
+      )}
+
       {showSettings && <window.SettingsModal config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} t={t} onOpenSchoolPicker={() => setShowSchoolPicker(true)} />}
       {showSchoolPicker && <window.SchoolPickerModal t={t} currentSchoolId={config.schoolId} requireSelection={!window.schoolsAPI.all().some(s => s.school_id === config.schoolId)} onClose={() => setShowSchoolPicker(false)} onSelect={handleSelectSchool} onCreate={handleCreateSchool} />}
       {showBank && <window.BankView t={t} loading={bankLoading} error={bankError} onClose={() => setShowBank(false)} onOpen={id => loadLessonFromBank(id)} onArchive={id => archiveLessonInBank(id)} onRefresh={refreshBank} />}
@@ -449,6 +458,7 @@ function App() {
             {config.schoolName && <button onClick={() => setShowSchoolPicker(true)} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 10px", fontSize: 12, fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", cursor: "pointer" }}>🏫 {config.schoolName}</button>}
             <Button variant="secondary" icon={<Icon name="settings" size={14} />} onClick={() => setShowSettings(true)}>{t.apiSettings}</Button>
             <Button variant="secondary" icon={<Icon name="book" size={14} />} onClick={() => setShowBank(true)} title={t.bankTitle}>{t.bankButton} <window.SavedCountInline /></Button>
+            <Button variant="yellow" icon={<span style={{fontSize:12}}>⏱️</span>} onClick={() => setShowFillerBank(true)}>{config.language === "sv" ? "Tidsfördriv" : "Fillers"}</Button>
           </div>
         </header>
 
@@ -486,6 +496,11 @@ function App() {
                 <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={generateLesson}>{t.addAnother}</Button>
                 <Button variant="ghost" icon={<Icon name="print" size={13} />} onClick={() => window.print()}>{t.print}</Button>
                 <Button variant="ghost" icon={<Icon name="download" size={13} />} onClick={exportMd}>{t.download}</Button>
+                {acceptedLesson && acceptedLesson.isSub && (
+                  <Button variant="yellow" icon={<span style={{fontSize:12}}>✉️</span>} onClick={() => setShowEmailPackage(true)}>
+                    {config.language === "sv" ? "Skicka till vikarie" : "Send to sub"}
+                  </Button>
+                )}
               </div>
             </div>
 
