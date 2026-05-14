@@ -67,8 +67,8 @@ function App() {
   const [bankError, setBankError] = useState_app("");
   const [showPoolFull, setShowPoolFull] = useState_app(false);
 
-  const [pageTab, setPageTab] = useState_app("teacher");
-  const isSub = pageTab === "sub";
+  const [pageTab, setPageTab] = useState_app("sub");
+  const isSub = true; // App is sub-only
 
   const [stage, setStage] = useState_app("");
   const [grade, setGrade] = useState_app("");
@@ -357,7 +357,7 @@ function App() {
     <div className="no-print" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: 24, marginBottom: 16 }}>
       <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
         <Icon name="file" size={14} />
-        {isSub ? (config.language === "sv" ? "Vikariedetaljer" : "Substitute details") : t.lessonDetails}
+        {config.language === "sv" ? "Vikariedetaljer" : "Substitute details"}
       </h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
         <Field label={t.stage}><Select value={stage} onChange={e => setStage(e.target.value)}><option value="">{t.chooseStage}</option>{Object.keys(window.STAGES).map(s => <option key={s} value={s}>{window.localizeLabel(s, config.language)}</option>)}</Select></Field>
@@ -405,8 +405,7 @@ function App() {
       </div>
 
       <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px dashed var(--border-default)" }}>
-        {isSub ? (
-          <div>
+        <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>{t.detailLevel}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
               {subDetailOpts.map(o => {
@@ -421,9 +420,6 @@ function App() {
               {config.language === "sv" ? "☕ Material: papper, pennor, tavla — inget som kräver utskrift eller förberedelse." : "☕ Materials: paper, pens, board — nothing requiring printing or prep."}
             </div>
           </div>
-        ) : (
-          <window.DetailAndExtrasControls detailLevel={detailLevel} setDetailLevel={setDetailLevel} extrasEnabled={extrasEnabled} setExtrasEnabled={setExtrasEnabled} t={t} />
-        )}
       </div>
 
       <div style={{ marginTop: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -433,11 +429,11 @@ function App() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {acceptedLesson && <Button variant="secondary" icon={<Icon name="refresh" size={14} />} onClick={reset}>{t.reset}</Button>}
           <Button
-            variant={isSub ? "yellow" : "primary"}
-            icon={loadingChoices ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name={isSub ? "coffee" : "sparkles"} size={14} />}
+            variant="yellow"
+            icon={loadingChoices ? <Icon name="refresh" size={14} style={{ animation: "spin 0.8s linear infinite" }} /> : <Icon name="coffee" size={14} />}
             onClick={generateLesson}
             disabled={!canGenerate || loadingChoices || generatingSub}>
-            {loadingChoices ? (config.language === "sv" ? "Hämtar…" : "Loading…") : isSub ? (t.createStandaloneSub || "Skapa vikarielektion") : t.generateChoices}
+            {loadingChoices ? (config.language === "sv" ? "Hämtar…" : "Loading…") : (config.language === "sv" ? "Skapa vikarielektion" : "Create substitute lesson")}
           </Button>
         </div>
       </div>
@@ -465,7 +461,7 @@ function App() {
         <header className="no-print" style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 38, height: 38, background: "var(--accent)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}><Icon name="book" size={20} /></div>
-            <div><h1 style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2 }}>{t.title}</h1><p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>{t.subtitle}</p></div>
+            <div><h1 style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2 }}>☕ {config.language === "sv" ? "Vikarieplaneringen" : "Sub Planner"}</h1><p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>{config.language === "sv" ? "AI-stöd för vikarier — inga förberedelser, allt inbäddat." : "AI-powered substitute planning — no prep required."}</p></div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <div style={{ fontSize: 12, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
@@ -481,19 +477,19 @@ function App() {
 
         <div className="no-print" style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid var(--border-subtle)" }}>
           {[
-            { key: "teacher", label: config.language === "sv" ? "📋 Lektionsplan" : "📋 Lesson Plan" },
-            { key: "sub",     label: config.language === "sv" ? "☕ Vikarielektion" : "☕ Substitute Lesson" },
-            { key: "filler",  label: config.language === "sv" ? "⏱️ Tidsfördriv" : "⏱️ Fillers" },
+            { key: "sub",    label: config.language === "sv" ? "☕ Vikarielektion" : "☕ Substitute Lesson" },
+            { key: "filler", label: config.language === "sv" ? "⏱️ Tidsfördriv"   : "⏱️ Fillers" },
           ].map(tab => (
-            <button key={tab.key} onClick={() => {
-              if (tab.key === "filler") { setShowFillerBank(true); }
-              else { setPageTab(tab.key); }
-            }} style={{
+            <button key={tab.key} onClick={() => setPageTab(tab.key)} style={{
               padding: "10px 20px", fontSize: 13, fontWeight: 600,
               background: "transparent", border: "none",
-              borderBottom: pageTab === tab.key ? "2px solid var(--accent)" : tab.key === "filler" ? "2px solid #C9A013" : "2px solid transparent",
+              borderBottom: pageTab === tab.key
+                ? (tab.key === "filler" ? "2px solid #C9A013" : "2px solid var(--accent)")
+                : "2px solid transparent",
               marginBottom: -2,
-              color: pageTab === tab.key ? "var(--accent)" : tab.key === "filler" ? "#7A5800" : "var(--text-secondary)",
+              color: pageTab === tab.key
+                ? (tab.key === "filler" ? "#7A5800" : "var(--accent)")
+                : "var(--text-secondary)",
               cursor: "pointer", transition: "all 0.15s",
             }}>{tab.label}</button>
           ))}
@@ -508,7 +504,7 @@ function App() {
         )}
 
         {pageTab === "filler"
-          ? (window.FillerBankView && <window.FillerBankView config={config} onClose={() => setPageTab("teacher")} />)
+          ? (window.FillerBankView && <window.FillerBankView config={config} onClose={() => setPageTab("sub")} />)
           : renderForm()
         }
 
@@ -522,7 +518,7 @@ function App() {
           <div style={{ marginBottom: 16 }}>
             <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-                {acceptedLesson.isSub ? "☕" : "📋"} {t.yourLesson}
+                ☕ {config.language === "sv" ? "Din vikarielektion" : "Your substitute lesson"}
                 {servedFromBank && <span style={{ fontSize: 11, fontWeight: 500, color: "#2E7D32", background: "#E8F5E9", padding: "2px 8px", borderRadius: 999, border: "1px solid #A5D6A7" }}>✓ {config.language === "sv" ? "Från banken" : "From bank"}</span>}
                 {translating && <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="refresh" size={11} style={{ animation: "spin 0.8s linear infinite" }} /> {t.translating}</span>}
               </h2>
