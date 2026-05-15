@@ -308,7 +308,7 @@ function FillerRating({ fillerId, existingAvg, ratingCount }) {
 }
 
 // ── FillerCard ────────────────────────────────────────────────────────────
-function FillerCard({ item, language, config, onEmail, onArchive, onDelete }) {
+function FillerCard({ item, language, config, onEmail, onArchive, onDelete, onToggleLang }) {
   const [expanded, setExpanded] = useState_filler(false);
   const [translating, setTranslating] = useState_filler(false);
   const [translatedAct, setTranslatedAct] = useState_filler(null);
@@ -340,7 +340,12 @@ function FillerCard({ item, language, config, onEmail, onArchive, onDelete }) {
               {act.format} · {act.duration}
               {item._avgRating >= 8 && <span style={{ marginLeft: 6, color: "#C9A013" }}>⭐ Top rated</span>}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{act.title}{translating ? <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 6, fontWeight: 400 }}>translating…</span> : null}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{act.title}{translating ? <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 6, fontWeight: 400 }}>translating…</span> : null}</span>
+              {onToggleLang && window.LangToggle && (
+                <window.LangToggle value={language} onChange={onToggleLang} />
+              )}
+            </div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>{act.summary}</div>
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
@@ -546,7 +551,7 @@ function FillerEmailModal({ item, language, onClose }) {
 })();
 
 
-window.FillerBankView = function FillerBankView({ config, onClose }) {
+window.FillerBankView = function FillerBankView({ config, onClose, onLanguageChange }) {
   const language  = config?.language || "sv";
   const isSv      = language !== "en";
 
@@ -632,6 +637,9 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {refreshing && <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>…</span>}
           <button onClick={() => { setRefreshing(true); window.fillerAPI.refresh().finally(() => setRefreshing(false)); }} style={window.smallBtn}>↻</button>
+          {window.LangToggle && onLanguageChange && (
+            <window.LangToggle value={language} onChange={onLanguageChange} />
+          )}
         </div>
       </div>
 
@@ -717,7 +725,7 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {pool.map((item, idx) => (
-              <FillerCard key={item.filler_id} item={item} language={language} config={config} rank={idx + 1} onEmail={setEmailItem} onArchive={id => window.fillerAPI.archive(id)} onDelete={id => window.fillerAPI.deletePermanently(id)} />
+              <FillerCard key={item.filler_id} item={item} language={language} config={config} rank={idx + 1} onEmail={setEmailItem} onArchive={id => window.fillerAPI.archive(id)} onDelete={id => window.fillerAPI.deletePermanently(id)} onToggleLang={onLanguageChange} />
             ))}
           </div>
         </div>
