@@ -504,7 +504,7 @@ function App() {
         )}
 
         {pageTab === "filler"
-          ? (window.FillerBankView && <window.FillerBankView config={config} onClose={() => setPageTab("sub")} />)
+          ? (window.FillerBankView && <window.FillerBankView config={config} onClose={() => setPageTab("sub")} onLanguageChange={lng => saveConfig({ ...config, language: lng })} />)
           : renderForm()
         }
 
@@ -522,7 +522,8 @@ function App() {
                 {servedFromBank && <span style={{ fontSize: 11, fontWeight: 500, color: "#2E7D32", background: "#E8F5E9", padding: "2px 8px", borderRadius: 999, border: "1px solid #A5D6A7" }}>✓ {config.language === "sv" ? "Från banken" : "From bank"}</span>}
                 {translating && <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="refresh" size={11} style={{ animation: "spin 0.8s linear infinite" }} /> {t.translating}</span>}
               </h2>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <LangToggle value={config.language} onChange={lng => saveConfig({ ...config, language: lng })} />
                 <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={generateLesson}>{t.addAnother}</Button>
                 <Button variant="ghost" icon={<Icon name="print" size={13} />} onClick={() => window.print()}>{t.print}</Button>
                 <Button variant="ghost" icon={<Icon name="download" size={13} />} onClick={exportMd}>{t.download}</Button>
