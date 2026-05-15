@@ -153,12 +153,46 @@ window.fillerPrompt = function fillerPrompt({ yearBand, category, language }) {
   const ybLabel  = yearBand;
   const isEn = language === "en";
 
-  const langPrefix = isEn
-    ? `**LANGUAGE: English.** Every string value in the JSON MUST be in English.\n\n`
-    : `**SPRÅK: Svenska.** Allt innehåll i JSON-svaret ska skrivas på svenska.\n\n`;
-  const langInstr = isEn ? "Respond in English." : "Svara på svenska.";
+  if (isEn) return `You are creating a TIME-FILLER ACTIVITY for a substitute teacher. The activity must:
+- Take 10–20 minutes
+- Require ZERO preparation — only paper, pens and a whiteboard are allowed
+- Be fun, engaging and educational
+- Work without the substitute having subject knowledge
+- Suit: Year group/level ${ybLabel} · Category: ${catLabel}
+- Have ALL material embedded (every question, answer, instruction — nothing left for the sub to invent)
+- Be appropriately challenging — students should succeed but have to try
 
-  return `${langPrefix}Du skapar en TIDSFÖRDRIV-AKTIVITET (time-filler) för en vikarie. Aktiviteten ska:
+FORMAT: Choose ONE format that best suits the category:
+• Quiz (5–8 questions with options, answers, bonus rounds)
+• Puzzle (one problem or riddle with step-by-step solution)
+• Word game / writing task (concrete task with example answers)
+• Discussion (3–4 provocative questions with "listen-for" answers)
+• Drawing / creative (clear steps, no artistic skill required)
+• Competition (pairs or groups, scoring system, answer key)
+
+Respond ONLY with valid JSON, no markdown:
+{
+  "title": "catchy title (max 8 words)",
+  "format": "quiz|puzzle|wordgame|discussion|creative|competition",
+  "duration": "10-15 min",
+  "summary": "One sentence: what students do and why it is fun",
+  "teacherIntro": "Exactly what the sub says to introduce the activity (2–3 sentences, enthusiastic tone)",
+  "instructions": [
+    "Numbered step 1",
+    "Numbered step 2",
+    "Numbered step 3"
+  ],
+  "content": {
+    "items": [
+      { "q": "Question/task/statement", "a": "Answer/key", "note": "Extra info or bonus fact (optional)" }
+    ]
+  },
+  "boardText": "VERBATIM what the sub writes on the board (title + any rules/scoring). \\n for line breaks.",
+  "wrapUp": "How the sub closes the activity (1–2 sentences, incl. how to crown a winner if relevant)",
+  "funFact": "One surprising and fun fact connected to the theme (1 sentence)"
+}`;
+
+  return `Du skapar en TIDSFÖRDRIV-AKTIVITET för en vikarie. Aktiviteten ska:
 - Ta 10-20 minuter
 - Kräva NOLL förberedelse — papper, pennor och tavla är det enda tillåtna
 - Vara rolig, engagerande och pedagogisk
@@ -175,7 +209,7 @@ FORMAT: Välj ETT av dessa format som passar kategorin bäst:
 • Ritövning / kreativt (tydliga steg, inget konstnärligt kunnande krävs)
 • Tävling (par eller grupp, poängsystem, facit)
 
-${langInstr} Svara ENDAST med giltigt JSON, ingen markdown:
+Svara ENDAST med giltigt JSON, ingen markdown:
 {
   "title": "catchy titel (max 8 ord)",
   "format": "quiz|pussel|ordspel|diskussion|kreativt|tävling",
