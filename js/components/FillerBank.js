@@ -153,44 +153,6 @@ window.fillerPrompt = function fillerPrompt({ yearBand, category, language }) {
   const ybLabel  = yearBand;
   const isEn = language === "en";
 
-  if (isEn) return `You are creating a TIME-FILLER ACTIVITY for a substitute teacher. The activity must:
-- Take 10–20 minutes
-- Require ZERO preparation — only paper, pens and a whiteboard are allowed
-- Be fun, engaging and educational
-- Work without the substitute having subject knowledge
-- Suit: Year group/level ${ybLabel} · Category: ${catLabel}
-- Have ALL material embedded (every question, answer, instruction — nothing left for the sub to invent)
-- Be appropriately challenging — students should succeed but have to try
-
-FORMAT: Choose ONE format that best suits the category:
-• Quiz (5–8 questions with options, answers, bonus rounds)
-• Puzzle (one problem or riddle with step-by-step solution)
-• Word game / writing task (concrete task with example answers)
-• Discussion (3–4 provocative questions with "listen-for" answers)
-• Drawing / creative (clear steps, no artistic skill required)
-• Competition (pairs or groups, scoring system, answer key)
-
-Respond ONLY with valid JSON, no markdown:
-{
-  "title": "catchy title (max 8 words)",
-  "format": "quiz|puzzle|wordgame|discussion|creative|competition",
-  "duration": "10-15 min",
-  "summary": "One sentence: what students do and why it is fun",
-  "teacherIntro": "Exactly what the sub says to introduce the activity (2–3 sentences, enthusiastic tone)",
-  "instructions": [
-    "Numbered step 1",
-    "Numbered step 2",
-    "Numbered step 3"
-  ],
-  "content": {
-    "items": [
-      { "q": "Question/task/statement", "a": "Answer/key", "note": "Extra info or bonus fact (optional)" }
-    ]
-  },
-  "boardText": "VERBATIM what the sub writes on the board (title + any rules/scoring). \\n for line breaks.",
-  "wrapUp": "How the sub closes the activity (1–2 sentences, incl. how to crown a winner if relevant)",
-  "funFact": "One surprising and fun fact connected to the theme (1 sentence)"
-}`;
 
   return `Du skapar en TIDSFÖRDRIV-AKTIVITET för en vikarie. Aktiviteten ska:
 - Ta 10-20 minuter
@@ -243,6 +205,57 @@ window.useFillerVersion = function useFillerVersion() {
   return tick;
 };
 
+// ── Translate activity fields SV→EN on the fly ────────────────────────────
+const TRANSLATE_CACHE_KEY = "lp-filler-translations";
+
+function loadTranslateCache() {
+  try { return JSON.parse(localStorage.getItem(TRANSLATE_CACHE_KEY) || "{}"); }
+  catch(e) { return {}; }
+}
+function saveTranslateCache(cache) {
+  try { localStorage.setItem(TRANSLATE_CACHE_KEY, JSON.stringify(cache)); }
+  catch(e) {}
+}
+
+async function translateActivity(act, config) {
+  if (!act || !act.title) return act;
+  const cacheKey = act.title.slice(0, 30); // use title as cache key (good enough)
+  const cache = loadTranslateCache();
+  if (cache[cacheKey]) return cache[cacheKey];
+
+  const fields = {
+    title: act.title,
+    format: act.format,
+    summary: act.summary,
+    teacherIntro: act.teacherIntro,
+    instructions: act.instructions,
+    boardText: act.boardText,
+    wrapUp: act.wrapUp,
+    funFact: act.funFact,
+    content: act.content,
+  };
+
+  const prompt = `Translate the following JSON from Swedish to English. Return ONLY valid JSON with the same structure, all string values translated to English. Do not translate keys. Do not add markdown.
+
+${JSON.stringify(fields, null, 2)}`;
+
+  try {
+    const raw = await window.runLLM(config, prompt);
+    const clean = (typeof raw === "string")
+      ? raw.replace(/^\`\`\`json\s*/i, "").replace(/^\`\`\`\s*/i, "").replace(/\`\`\`\s*$/, "").trim()
+      : raw;
+    const translated = typeof clean === "string" ? JSON.parse(clean) : clean;
+    const result = { ...act, ...translated };
+    cache[cacheKey] = result;
+    saveTranslateCache(cache);
+    return result;
+  } catch(e) {
+    console.warn("Filler translation failed:", e.message);
+    return act; // fall back to Swedish
+  }
+}
+
+
 // ── FillerRatingWidget ────────────────────────────────────────────────────
 function FillerRating({ fillerId, existingAvg, ratingCount }) {
   const [hovered, setHovered] = useState_filler(null);
@@ -276,10 +289,24 @@ function FillerRating({ fillerId, existingAvg, ratingCount }) {
 }
 
 // ── FillerCard ────────────────────────────────────────────────────────────
-function FillerCard({ item, language, onEmail }) {
+function FillerCard({ item, language, config, onEmail }) {
   const [expanded, setExpanded] = useState_filler(false);
-  let act = item.activity || item.activity_json || {};
-  if (typeof act === "string") { try { act = JSON.parse(act); } catch(e) { act = {}; } }
+  const [translating, setTranslating] = useState_filler(false);
+  const [translatedAct, setTranslatedAct] = useState_filler(null);
+
+  let baseAct = item.activity || item.activity_json || {};
+  if (typeof baseAct === "string") { try { baseAct = JSON.parse(baseAct); } catch(e) { baseAct = {}; } }
+
+  // Translate on demand when EN is selected
+  useEffect_filler(() => {
+    if (language !== "en" || !baseAct.title || !config) { setTranslatedAct(null); return; }
+    setTranslating(true);
+    translateActivity(baseAct, config)
+      .then(t => setTranslatedAct(t))
+      .finally(() => setTranslating(false));
+  }, [language, item.filler_id]);
+
+  const act = (language === "en" && translatedAct) ? translatedAct : baseAct;
   const isSv = language !== "en";
 
   return (
@@ -292,7 +319,7 @@ function FillerCard({ item, language, onEmail }) {
               {act.format} · {act.duration}
               {item._avgRating >= 8 && <span style={{ marginLeft: 6, color: "#C9A013" }}>⭐ Top rated</span>}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{act.title}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{act.title}{translating ? <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 6, fontWeight: 400 }}>translating…</span> : null}</div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>{act.summary}</div>
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
@@ -648,7 +675,7 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {pool.map((item, idx) => (
-              <FillerCard key={item.filler_id} item={item} language={language} rank={idx + 1} onEmail={setEmailItem} />
+              <FillerCard key={item.filler_id} item={item} language={language} config={config} rank={idx + 1} onEmail={setEmailItem} />
             ))}
           </div>
         </div>
