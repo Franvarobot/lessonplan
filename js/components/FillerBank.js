@@ -50,7 +50,7 @@ window.FILLER_CATEGORIES = [
 ];
 
 // ── Supabase helpers (reuse pattern from bankAPI) ────────────────────────
-const FILLER_POOL_LIMIT = 3;
+const FILLER_POOL_LIMIT = 5;
 
 function _fbUrl(query = "") {
   return `${window.SUPABASE_URL}/rest/v1/filler_activities${query ? `?${query}` : ""}`;
@@ -72,6 +72,10 @@ async function _fbPatch(query, body) {
   const r = await fetch(_fbUrl(query), { method: "PATCH", headers: _fbHeaders(), body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`Filler PATCH failed: ${r.status} ${await r.text()}`);
   return r.json();
+}
+async function _fbDelete(query) {
+  const r = await fetch(_fbUrl(query), { method: "DELETE", headers: _fbHeaders() });
+  if (!r.ok) throw new Error(`Filler DELETE failed: ${r.status} ${await r.text()}`);
 }
 
 // ── Local cache ───────────────────────────────────────────────────────────
@@ -133,8 +137,7 @@ window.fillerAPI = {
 
   async rate({ fillerId, rating }) {
     const clamped = Math.min(10, Math.max(1, Math.round(rating)));
-    await _fbPost({ filler_id: fillerId, rating: clamped }); // assumes filler_ratings table
-    // Optimistic cache update
+    await _fbPost({ filler_id: fillerId, rating: clamped });
     const cache = loadFillerCache();
     const rec = cache.activities.find(a => a.filler_id === fillerId);
     if (rec) {
@@ -143,6 +146,22 @@ window.fillerAPI = {
       rec._ratingCount = rec._ratings.length;
       saveFillerCache(cache);
     }
+  },
+
+  async archive(fillerId) {
+    await _fbPatch(`filler_id=eq.${fillerId}`, { status: "archived" });
+    const cache = loadFillerCache();
+    cache.activities = cache.activities.filter(a => a.filler_id !== fillerId);
+    saveFillerCache(cache);
+    window.dispatchEvent(new Event("lp-filler-change"));
+  },
+
+  async deletePermanently(fillerId) {
+    await _fbDelete(`filler_id=eq.${fillerId}`);
+    const cache = loadFillerCache();
+    cache.activities = cache.activities.filter(a => a.filler_id !== fillerId);
+    saveFillerCache(cache);
+    window.dispatchEvent(new Event("lp-filler-change"));
   },
 };
 
@@ -289,10 +308,12 @@ function FillerRating({ fillerId, existingAvg, ratingCount }) {
 }
 
 // ── FillerCard ────────────────────────────────────────────────────────────
-function FillerCard({ item, language, config, onEmail }) {
+function FillerCard({ item, language, config, onEmail, onArchive, onDelete }) {
   const [expanded, setExpanded] = useState_filler(false);
   const [translating, setTranslating] = useState_filler(false);
   const [translatedAct, setTranslatedAct] = useState_filler(null);
+  const [archiving, setArchiving] = useState_filler(false);
+  const [confirmDelete, setConfirmDelete] = useState_filler(false);
 
   let baseAct = item.activity || item.activity_json || {};
   if (typeof baseAct === "string") { try { baseAct = JSON.parse(baseAct); } catch(e) { baseAct = {}; } }
@@ -326,6 +347,11 @@ function FillerCard({ item, language, config, onEmail }) {
             {onEmail && (
               <button onClick={() => onEmail(item)} title={isSv ? "Skicka till vikarie" : "Email to sub"} style={{ ...window.smallBtn, padding: "4px 8px", fontSize: 11 }}>✉️</button>
             )}
+            <button
+              onClick={async () => { setArchiving(true); try { if (onArchive) await onArchive(item.filler_id); } finally { setArchiving(false); } }}
+              title={isSv ? "Arkivera (dölj från pool)" : "Archive (hide from pool)"}
+              style={{ ...window.smallBtn, padding: "4px 8px", fontSize: 11, opacity: archiving ? 0.5 : 1 }}
+            >{archiving ? "…" : "📦"}</button>
             <button onClick={() => setExpanded(e => !e)} style={{ ...window.smallBtn, padding: "4px 8px", fontSize: 11 }}>
               {expanded ? (isSv ? "Dölj" : "Hide") : (isSv ? "Visa" : "View")} {expanded ? "▴" : "▾"}
             </button>
@@ -409,6 +435,22 @@ function FillerCard({ item, language, config, onEmail }) {
               🌟 {act.funFact}
             </div>
           )}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border-subtle)", display: "flex", justifyContent: "flex-end" }}>
+            {!confirmDelete
+              ? <button onClick={() => setConfirmDelete(true)} style={{ fontSize: 11, color: "var(--danger-text)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                  {isSv ? "🗑 Ta bort permanent" : "🗑 Delete permanently"}
+                </button>
+              : <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: "var(--danger-text)" }}>{isSv ? "Är du säker?" : "Are you sure?"}</span>
+                  <button onClick={async () => { if (onDelete) await onDelete(item.filler_id); setConfirmDelete(false); }} style={{ fontSize: 11, padding: "3px 10px", background: "var(--danger-text)", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
+                    {isSv ? "Ja, radera" : "Yes, delete"}
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 11, padding: "3px 8px", background: "var(--bg-secondary)", border: "1px solid var(--border-default)", borderRadius: 4, cursor: "pointer" }}>
+                    {isSv ? "Avbryt" : "Cancel"}
+                  </button>
+                </div>
+            }
+          </div>
         </div>
       )}
     </div>
@@ -675,7 +717,7 @@ window.FillerBankView = function FillerBankView({ config, onClose }) {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {pool.map((item, idx) => (
-              <FillerCard key={item.filler_id} item={item} language={language} config={config} rank={idx + 1} onEmail={setEmailItem} />
+              <FillerCard key={item.filler_id} item={item} language={language} config={config} rank={idx + 1} onEmail={setEmailItem} onArchive={id => window.fillerAPI.archive(id)} onDelete={id => window.fillerAPI.deletePermanently(id)} />
             ))}
           </div>
         </div>
