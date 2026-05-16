@@ -166,14 +166,17 @@ window.fillerAPI = {
 };
 
 // ── Filler generation prompt ───────────────────────────────────────────────
-window.fillerPrompt = function fillerPrompt({ yearBand, category, language }) {
+window.fillerPrompt = function fillerPrompt({ yearBand, category, language, existingTitles = [] }) {
   const cat = window.FILLER_CATEGORIES.find(c => c.key === category);
   const catLabel = cat ? (language === "en" ? cat.label.en : cat.label.sv) : category;
   const ybLabel  = yearBand;
   const isEn = language === "en";
+  const avoidBlock = existingTitles.length > 0
+    ? `\nVIKTIGT: Dessa aktiviteter finns redan — skapa något helt annorlunda, annan vinkel, annat format:\n${existingTitles.map((t, i) => `${i+1}. "${t}"`).join("\n")}\n`
+    : "";
 
 
-  return `Du skapar en TIDSFÖRDRIV-AKTIVITET för en vikarie. Aktiviteten ska:
+  return `${avoidBlock}Du skapar en TIDSFÖRDRIV-AKTIVITET för en vikarie. Aktiviteten ska:
 - Ta 10-20 minuter
 - Kräva NOLL förberedelse — papper, pennor och tavla är det enda tillåtna
 - Vara rolig, engagerande och pedagogisk
@@ -602,7 +605,11 @@ window.FillerBankView = function FillerBankView({ config, onClose, onLanguageCha
     // pick the most relevant year band based on what's already in the pool or default
     const yb = window.FILLER_YEAR_BANDS[1].key; // default 4-6
     try {
-      const prompt = window.fillerPrompt({ yearBand: yb, category, language });
+      const existingTitles = window.fillerAPI.all()
+        .filter(a => a.category === category && a.status === "active")
+        .map(a => { const act = a.activity || a.activity_json || {}; return (typeof act === "object" ? act.title : null); })
+        .filter(Boolean);
+      const prompt = window.fillerPrompt({ yearBand: yb, category, language, existingTitles });
       const raw = await window.runLLM(config, prompt);
       // Strip markdown fences if present, then parse JSON
       const clean = (typeof raw === "string")
