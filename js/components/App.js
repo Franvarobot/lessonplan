@@ -516,6 +516,7 @@ function App() {
         )}
 
         {acceptedLesson && pageTab !== "filler" && (
+          <LessonErrorBoundary>
           <div style={{ marginBottom: 16 }}>
             <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
@@ -524,7 +525,7 @@ function App() {
                 {translating && <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="refresh" size={11} style={{ animation: "spin 0.8s linear infinite" }} /> {t.translating}</span>}
               </h2>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <LangToggle value={config.language} onChange={lng => saveConfig({ ...config, language: lng })} />
+                {LangToggle && <LangToggle value={config.language} onChange={lng => saveConfig({ ...config, language: lng })} />}
                 <Button variant="ghost" icon={<Icon name="refresh" size={13} />} onClick={generateLesson}>{t.addAnother}</Button>
                 <Button variant="ghost" icon={<Icon name="print" size={13} />} onClick={() => window.print()}>{t.print}</Button>
                 <Button variant="ghost" icon={<Icon name="download" size={13} />} onClick={exportMd}>{t.download}</Button>
@@ -543,7 +544,6 @@ function App() {
               </div>
             )}
 
-            <LessonErrorBoundary>
             <window.LessonCardWithTabs
               lesson={acceptedLesson} t={t} language={config.language}
               extrasEnabled={acceptedLesson.isSub ? {} : extrasEnabled}
@@ -555,8 +555,8 @@ function App() {
               onMarkUsed={markLessonUsed}
               onSubmitFeedback={null}
             />
-            </LessonErrorBoundary>
           </div>
+          </LessonErrorBoundary>
         )}
 
         <div className="no-print" style={{ marginTop: 40, fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.6 }}>{t.print_warning}</div>
