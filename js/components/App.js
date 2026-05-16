@@ -59,7 +59,15 @@ function App() {
   const Input = window.Input; const Select = window.Select; const LangToggle = window.LangToggle;
   const asLine = window.asLine;
 
-  const [config, setConfig] = useState_app(window.DEFAULT_CONFIG);
+  const [config, setConfig] = useState_app(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(window.STORAGE_KEY) || "{}");
+      if (saved && typeof saved === "object" && Object.keys(saved).length > 0) {
+        return { ...window.DEFAULT_CONFIG, ...saved };
+      }
+    } catch {}
+    return window.DEFAULT_CONFIG;
+  });
   const [showSettings, setShowSettings] = useState_app(false);
   const [showBank, setShowBank] = useState_app(false);
   const [showSchoolPicker, setShowSchoolPicker] = useState_app(false);
@@ -105,13 +113,6 @@ function App() {
   const [error, setError] = useState_app("");
 
   const t = window.LANG[config.language] || window.LANG.sv;
-
-  useEffect_app(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(window.STORAGE_KEY) || "{}");
-      if (saved && typeof saved === "object") setConfig(c => ({ ...c, ...saved }));
-    } catch {}
-  }, []);
 
   const saveConfig = (next) => {
     setConfig(next);
